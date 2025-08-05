@@ -27,10 +27,7 @@ const userSchema = new Schema(
           type: Boolean,
           default: false
       },
-      otp: {
-          type: Number,
-          default: 0
-      },
+      
       timestamp: {
           type: Date,
           required: false

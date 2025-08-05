@@ -46,157 +46,6 @@ allowedFileTypes.map((fileType) =>
 
 const renameAsync = promisify(fs.rename);
 
-// const processSingleImage = async (image) => {
-
-//     let original_file_name_without_extension = image.originalname.split('.');
-//     let original_file_extension = original_file_name_without_extension.pop();
-
-//     let current_file_name_without_extension = image.filename.split('.');
-//     let current_file_extension = current_file_name_without_extension.pop();
-
-//     let extension = image.filename.split('.');
-//     extension = extension.pop();
-
-//     let imageToReturn = {
-//         name: {
-//             original: original_file_name_without_extension[0],
-//             current: current_file_name_without_extension[0]
-//         },
-//         size: {
-//             original: image.size,
-//             current: 0
-//         },
-//         extension: {
-//             original: extension,
-//             current: ''
-//         },
-//         image_url: {
-//             full: {
-//                 high_res: '',
-//                 low_res: '',
-//             },
-//             thumbnail: {
-//                 high_res: '',
-//                 low_res: '',
-//             }
-//         }
-//     }
-
-//     const image_metadata = await sharp(image.path).metadata();
-
-//     let set_image_width_as_max_width = false;
-//     let is_thumbnail_required = false;
-
-//     if(image_metadata.width > 1500){
-//         set_image_width_as_max_width = true;
-//     }
-//     else if(image_metadata.width > 500){
-//         is_thumbnail_required = true;
-//     }
-//     else{
-//         set_image_width_as_max_width = false;
-//         is_thumbnail_required = false;
-//     }
-
-//     const image_url = image.path.replace(/\\/g,"/");
-//     const url_array = image_url.split("/");
-//     const file_name_with_ext = url_array;
-//     const file_name_without_ext = file_name_with_ext[2].replace(/\.[^/.]+$/, "");
-//     let final_file_name = file_name_without_ext.replaceAll(/\s/g,'');
-//     final_file_name = final_file_name.replace(/[{()}]/g, "");
-
-//     //generate final full width high res image in .webp format
-//     try{
-//         const generateHighResFullImageAsWebp = await sharp(image_url)
-//             .resize({width: set_image_width_as_max_width ? 1500 : image_metadata.width})
-//             .toFormat('webp')
-//             .webp({quality: 80})
-//             .toFile(`assets/images/full/high_res/${final_file_name}.webp`);
-
-//         imageToReturn.image_url.full.high_res = `assets/images/full/high_res/${final_file_name}.webp`;
-//     }
-//     catch(error){
-//         console.log(error);
-//         return {
-//             status: false
-//         }
-//     }
-
-//     //generate final full width low res image in .webp format
-//     try{
-//         const generateLowResFullImageAsWebp = await sharp(image_url)
-//             .resize({width: set_image_width_as_max_width ? 1500 : image_metadata.width})
-//             .toFormat('webp')
-//             .webp({quality: 60})
-//             .toFile(`assets/images/full/low_res/${final_file_name}.webp`);
-
-//         imageToReturn.image_url.full.low_res = `assets/images/full/low_res/${final_file_name}.webp`;
-//     }
-//     catch(error){
-//         console.log(error);
-//         return {
-//             status: false
-//         }
-//     }
-
-//     if(is_thumbnail_required){
-//         //generate final thumbnail high res image in .webp format
-//         try{
-//             const generateHighResThumbImageAsWebp = await sharp(imageToReturn.image_url.full.high_res)
-//                 .resize({width: 250, height: 250, fit: 'contain', background: "#f1f5f9"})
-//                 .toFormat('webp')
-//                 .webp({quality: 100})
-//                 .toFile(`assets/images/thumb/high_res/${final_file_name}.webp`);
-
-//             imageToReturn.image_url.thumbnail.high_res = `assets/images/thumb/high_res/${final_file_name}.webp`;
-//         }
-//         catch(error){
-//             console.log(error);
-//             return {
-//                 status: false
-//             }
-//         }
-
-//         //generate final thumbnail low res image in .webp format
-//         try{
-//             const generateHighResThumbImageAsWebp = await sharp(imageToReturn.image_url.full.high_res)
-//                 .resize({width: 250, height: 250, fit: 'contain', background: "#f1f5f9"})
-//                 .toFormat('webp')
-//                 .webp({quality: 70})
-//                 .toFile(`assets/images/thumb/low_res/${final_file_name}.webp`);
-
-//             imageToReturn.image_url.thumbnail.low_res = `assets/images/thumb/low_res/${final_file_name}.webp`;
-//         }
-//         catch(error){
-//             console.log(error);
-//             return {
-//                 status: false
-//             }
-//         }
-//     }
-//     else{
-//         imageToReturn.image_url.thumbnail.high_res = imageToReturn.image_url.full.high_res;
-//         imageToReturn.image_url.thumbnail.low_res = imageToReturn.image_url.full.low_res;
-//     }
-
-//     let optimized_file_metadata = await sharp(imageToReturn.image_url.full.high_res).metadata();
-
-//     imageToReturn.extension.current = optimized_file_metadata.format;
-//     let optimized_image = fs.statSync(imageToReturn.image_url.full.high_res)
-//     imageToReturn.size.current = optimized_image.size;
-
-//     try{
-//         fs.unlinkSync(image.path);
-//     }
-//     catch(error){
-//         console.log(error);
-//     }
-
-//     return {
-//         status: true,
-//         data: imageToReturn
-//     }
-// }
 
 const processSingleImage = async (image) => {
 
@@ -425,45 +274,13 @@ const processSingleAudio = async (audio) => {
 
 module.exports.saveMediaFile = async (req, res) => {
     const errors = validationResult(req);
-
     if(!errors.isEmpty()){
         return res.status(STATUS.VALIDATION_FAILED).json({
             message: `Bad request`,
         });
     }
 
-    const token = req.get('Authorization');
-    let decodedToken = await jwt.decode(token);
-
-    // if(decodedToken.role != "TNO" && decodedToken.role != "DS" && decodedToken.role != "DC" && decodedToken.role != "CEO" && decodedToken.role != "ADMIN"&&decodedToken.role != "DHO"&&decodedToken.role != "DIS" ){
-    //     return res.status(STATUS.UNAUTHORISED).json({
-    //         message: MESSAGE.unauthorized,
-    //     });
-    // }
-
-    let adminDetails = null;
-
-    try{
-        const checkAdminExistanceReq = await User.findOne({ _id: decodedToken.uid });
-        if(checkAdminExistanceReq){
-            adminDetails = checkAdminExistanceReq;
-        }
-        else{
-            adminDetails = null;
-        }
-    }
-    catch(error){
-        return res.status(STATUS.BAD_REQUEST).json({
-            message: MESSAGE.badRequest,
-            error
-        });
-    }
-
-    if(adminDetails === null){
-        return res.status(STATUS.FORBIDDEN).json({
-            message: MESSAGE.badRequest,
-        });
-    }
+    // Remove all authentication and user checks
 
     let new_media = {
         name: {
@@ -503,7 +320,7 @@ module.exports.saveMediaFile = async (req, res) => {
         },
         other_file_url: undefined,
         media_type: '',
-        uploaded_by: adminDetails.id,
+        uploaded_by: null, // No user
     }
     
     const isFileTypeImage = image_mime_types.includes(req.file.mimetype);
@@ -518,7 +335,6 @@ module.exports.saveMediaFile = async (req, res) => {
 
     if(isFileTypeImage){
         processImage = await processSingleImage(req.file);
-        console.log("PROCESS IMAGE VARIBLE:  ",processImage);
         new_media.name.temp = processImage.data.name.current;
         new_media.name.original = processImage.data.name.original;
         new_media.name.current = processImage.data.name.current;
@@ -538,26 +354,15 @@ module.exports.saveMediaFile = async (req, res) => {
         processVideo = await processSingleVideo(req.file);
     }
     else if(isFileTypeDocument){
-
         processDocument = await processSingleDocument(req.file);
-
         if(processDocument.status === true){
             new_media.name.temp = processDocument.data.name.current;
             new_media.name.original = processDocument.data.name.original;
             new_media.name.current = processDocument.data.name.current;
-            // new_media.name.history.push({
-            //     name: processDocument.data.name.current,
-            //     created_by: adminDetails.id,
-            //     moderated_by: adminDetails.role === "SUPER_ADMIN" || adminDetails.role === "CONTENT_ADMIN" ? adminDetails.id : undefined,
-            //     approved_by: adminDetails.role === "SUPER_ADMIN" || adminDetails.role === "CONTENT_ADMIN" ? adminDetails.id : undefined
-            // });
-    
             new_media.extension.original = processDocument.data.extension.original;
             new_media.extension.current = processDocument.data.extension.current;
-    
             new_media.size.original = processDocument.data.size.original;
             new_media.size.current = processDocument.data.size.current;
-    
             new_media.doc_url = processDocument.data.doc_url;
         }
         else{
@@ -565,18 +370,15 @@ module.exports.saveMediaFile = async (req, res) => {
                 message: MESSAGE.badRequest
             });
         }
-        
     }
     else if(isFileTypeAudio){
         processAudio = await processSingleAudio(req.file);
     }
 
     let tempMediaTypes = null;
-
     try{
         const getMediaTypesReq = await MediaType.find({ is_archived: false });
         tempMediaTypes = getMediaTypesReq;
-        console.log("TEMP MED TYPS:",tempMediaTypes)
     }
     catch(error){
         return res.status(STATUS.BAD_REQUEST).json({
@@ -588,17 +390,14 @@ module.exports.saveMediaFile = async (req, res) => {
         let thisMediaType = tempMediaTypes.find((mt) => mt.name == "image");
         new_media.media_type = thisMediaType.id;
     }
-
     if(isFileTypeDocument){
         let thisMediaType = tempMediaTypes.find((mt) => mt.name == "document"); 
         new_media.media_type = thisMediaType.id;
     }
 
     let save_media = new Media(new_media);
-
     try{
         const savedMedia = await save_media.save();
-
         if(savedMedia){
             return res.status(STATUS.CREATED).json({
                 message: "Media Created Successfully",
@@ -612,7 +411,6 @@ module.exports.saveMediaFile = async (req, res) => {
         }
     }
     catch(error){
-        console.log(error);
         return res.status(STATUS.BAD_REQUEST).json({
             message: MESSAGE.badRequest,
             error

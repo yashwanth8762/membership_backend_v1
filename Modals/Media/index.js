@@ -132,7 +132,7 @@ const mediaSchema = new Schema(
         uploaded_by: { 
             type: ObjectId, 
             ref: 'user', 
-            required: true 
+            required: false // Make this field optional
         },
         belongs_to_folder: {
             type: Boolean,

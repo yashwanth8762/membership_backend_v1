@@ -50,6 +50,10 @@ const userRoutes = require("./routes/User");
 const membershipRoutes = require('./routes/Membership');
 const mediaTypeRoutes = require('./routes/mediaType');
 const mediaRoutes = require('./routes/media');
+const activityRoutes = require('./routes/Activity');
+const programRoutes = require('./routes/UpcommingPrograms');
+const galleryRoutes = require('./routes/Gallary');
+
 
 
 
@@ -58,6 +62,9 @@ app.use(`${API_ROOT}membership`, membershipRoutes);
 app.use(`${API_ROOT}user`, userRoutes);
 app.use(`${API_ROOT}media-type`, mediaTypeRoutes)
 app.use(`${API_ROOT}media`, mediaRoutes)
+app.use(`${API_ROOT}activity`, activityRoutes);
+app.use(`${API_ROOT}upcommingprograms`, programRoutes);
+app.use(`${API_ROOT}gallery`, galleryRoutes);
 
 
 

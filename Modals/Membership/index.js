@@ -11,6 +11,7 @@ const membershipFormSchema = new Schema({
         enum: ['text', 'checkbox', 'radio', 'textarea', 'dropdown', 'media', 'number']
       },
       label: { type: String, required: true },
+      label_kn: { type: String }, // Kannada label for the field
       options: [String], // For dropdown, radio, checkbox
       required: { type: Boolean, default: false },
       order: { type: Number, default: 0 },

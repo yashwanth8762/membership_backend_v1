@@ -4,7 +4,13 @@ const crypto = require('crypto');
 // Admin: Create a new membership form structure
 exports.createForm = async (req, res) => {
   try {
-    const { fields } = req.body;
+    let { fields } = req.body;
+    // Ensure each field has both label and label_kn
+    fields = fields.map(f => ({
+      ...f,
+      label: f.label,
+      label_kn: f.label_kn || '',
+    }));
     const form = new MembershipForm({ fields });
     await form.save();
     res.status(201).json(form);
