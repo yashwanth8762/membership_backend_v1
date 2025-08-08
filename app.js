@@ -53,6 +53,8 @@ const mediaRoutes = require('./routes/media');
 const activityRoutes = require('./routes/Activity');
 const programRoutes = require('./routes/UpcommingPrograms');
 const galleryRoutes = require('./routes/Gallary');
+const districtRoutes = require('./routes/district');
+const talukRoutes = require('./routes/taluk');
 
 
 
@@ -65,6 +67,8 @@ app.use(`${API_ROOT}media`, mediaRoutes)
 app.use(`${API_ROOT}activity`, activityRoutes);
 app.use(`${API_ROOT}upcommingprograms`, programRoutes);
 app.use(`${API_ROOT}gallery`, galleryRoutes);
+app.use(`${API_ROOT}district`, districtRoutes);
+app.use(`${API_ROOT}taluk`, talukRoutes);
 
 
 

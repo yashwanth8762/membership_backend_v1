@@ -24,6 +24,16 @@ const membershipFormSchema = new Schema({
 const membershipSubmissionSchema = new Schema({
   membershipId: { type: String, required: true, unique: true }, // Randomly generated
   formId: { type: mongoose.Schema.Types.ObjectId, ref: 'membership_form', required: true },
+  district: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'district', 
+    required: true 
+  },
+  taluk: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'taluk', 
+    required: true 
+  },
   values: [
     {
       label: { type: String, required: true },

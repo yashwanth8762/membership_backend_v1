@@ -1,4 +1,5 @@
 const { MembershipForm, MembershipSubmission } = require('../../Modals/Membership');
+const Media = require('../../Modals/Media');
 const crypto = require('crypto');
 
 // Admin: Create a new membership form structure
@@ -35,10 +36,30 @@ exports.submitMembership = async (req, res) => {
     const { formId, values } = req.body;
     // Generate a random membershipId
     const membershipId = crypto.randomBytes(8).toString('hex');
+    
+    // Process values to separate media IDs from regular values
+    const processedValues = values.map(item => {
+      if (Array.isArray(item.value) && item.value.length > 0 && item.value[0] !== null) {
+        // This is a media field, store media IDs in media array
+        return {
+          label: item.label,
+          value: item.value, // Keep the array as value
+          media: item.value.filter(id => id !== null) // Store non-null IDs in media array
+        };
+      } else {
+        // This is a regular field
+        return {
+          label: item.label,
+          value: item.value,
+          media: item.media || [] // Use provided media array or empty array
+        };
+      }
+    });
+
     const submission = new MembershipSubmission({
       membershipId,
       formId,
-      values,
+      values: processedValues,
     });
     await submission.save();
     res.status(201).json({ membershipId, submission });
@@ -51,12 +72,75 @@ exports.submitMembership = async (req, res) => {
 exports.getMembershipById = async (req, res) => {
   try {
     const { membershipId } = req.params;
+    console.log('Fetching membership with ID:', membershipId);
+    
     const submission = await MembershipSubmission.findOne({ membershipId });
     if (!submission) {
+      console.log('Membership not found for ID:', membershipId);
       return res.status(404).json({ message: 'Membership not found' });
     }
-    res.json(submission);
+
+    console.log('Found submission:', submission);
+    console.log('Submission values:', submission.values);
+
+    // Populate media details for each value that has media
+    const populatedValues = await Promise.all(
+      submission.values.map(async (value) => {
+        console.log(`Processing value for label: ${value.label}, media:`, value.media);
+        
+        if (value.media && value.media.length > 0) {
+          console.log(`Found media IDs for ${value.label}:`, value.media);
+          
+          // Fetch media details for each media ID
+          const mediaDetails = await Promise.all(
+            value.media.map(async (mediaId) => {
+              try {
+                console.log(`Fetching media with ID: ${mediaId}`);
+                const media = await Media.findById(mediaId);
+                console.log(`Media found for ID ${mediaId}:`, media);
+                
+                if (media) {
+                  return {
+                    id: media._id,
+                    name: media.name,
+                    image_url: media.image_url,
+                    doc_url: media.doc_url,
+                    video_url: media.video_url,
+                    extension: media.extension,
+                    size: media.size
+                  };
+                }
+                return null;
+              } catch (err) {
+                console.error(`Error fetching media ${mediaId}:`, err);
+                return null;
+              }
+            })
+          );
+          
+          console.log(`Media details for ${value.label}:`, mediaDetails);
+          
+          return {
+            ...value,
+            media: mediaDetails.filter(media => media !== null)
+          };
+        }
+        return value;
+      })
+    );
+
+    console.log('Populated values:', populatedValues);
+
+    // Create response with populated media
+    const response = {
+      ...submission.toObject(),
+      values: populatedValues
+    };
+
+    console.log('Final response:', response);
+    res.json(response);
   } catch (error) {
+    console.error('Error in getMembershipById:', error);
     res.status(500).json({ message: 'Error fetching membership', error: error.message });
   }
 }; 
