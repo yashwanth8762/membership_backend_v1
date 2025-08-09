@@ -1,5 +1,7 @@
 const { MembershipForm, MembershipSubmission } = require('../../Modals/Membership');
 const Media = require('../../Modals/Media');
+const District = require('../../Modals/District');
+const Taluk = require('../../Modals/Taluk');
 const crypto = require('crypto');
 
 // Admin: Create a new membership form structure
@@ -33,7 +35,21 @@ exports.getForms = async (req, res) => {
 // User: Submit a membership form
 exports.submitMembership = async (req, res) => {
   try {
-    const { formId, values } = req.body;
+    const { formId, district, taluk, values } = req.body;
+    
+    // Validate required fields
+    if (!formId) {
+      return res.status(400).json({ message: 'Form ID is required' });
+    }
+    
+    if (!district) {
+      return res.status(400).json({ message: 'District is required' });
+    }
+    
+    if (!taluk) {
+      return res.status(400).json({ message: 'Taluk is required' });
+    }
+    
     // Generate a random membershipId
     const membershipId = crypto.randomBytes(8).toString('hex');
     
@@ -59,11 +75,14 @@ exports.submitMembership = async (req, res) => {
     const submission = new MembershipSubmission({
       membershipId,
       formId,
+      district,
+      taluk,
       values: processedValues,
     });
     await submission.save();
     res.status(201).json({ membershipId, submission });
   } catch (error) {
+    console.error('Error in submitMembership:', error);
     res.status(500).json({ message: 'Error submitting membership', error: error.message });
   }
 };
@@ -74,7 +93,10 @@ exports.getMembershipById = async (req, res) => {
     const { membershipId } = req.params;
     console.log('Fetching membership with ID:', membershipId);
     
-    const submission = await MembershipSubmission.findOne({ membershipId });
+    const submission = await MembershipSubmission.findOne({ membershipId })
+      .populate('district', 'name k_name')
+      .populate('taluk', 'name k_name');
+      
     if (!submission) {
       console.log('Membership not found for ID:', membershipId);
       return res.status(404).json({ message: 'Membership not found' });
@@ -131,10 +153,12 @@ exports.getMembershipById = async (req, res) => {
 
     console.log('Populated values:', populatedValues);
 
-    // Create response with populated media
+    // Create response with populated media, district, and taluk
     const response = {
       ...submission.toObject(),
-      values: populatedValues
+      values: populatedValues,
+      district: submission.district,
+      taluk: submission.taluk
     };
 
     console.log('Final response:', response);
