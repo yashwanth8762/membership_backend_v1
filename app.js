@@ -14,10 +14,10 @@ const fs = require("fs");
 
 cron.schedule('01 01 * * *', () => {
     const empty_these_directories = [
-        "assets/district_issues",
-        "assets/department_issues",
-        "assets/district_reports",
-        "assets/dis_reports",
+        "assets/temp_resources",
+        "assets/images",
+        "assets/documents",
+        // "assets/dis_reports",
     ]
     
     empty_these_directories.map((directory) => {

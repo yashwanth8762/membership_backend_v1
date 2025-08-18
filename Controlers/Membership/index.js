@@ -3,6 +3,7 @@ const Media = require('../../Modals/Media');
 const District = require('../../Modals/District');
 const Taluk = require('../../Modals/Taluk');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 
 // Admin: Create a new membership form structure
 exports.createForm = async (req, res) => {
@@ -168,3 +169,62 @@ exports.getMembershipById = async (req, res) => {
     res.status(500).json({ message: 'Error fetching membership', error: error.message });
   }
 }; 
+
+exports.getMembershipsFiltered = async (req, res) => {
+  try {
+    let { district, taluk } = req.query;
+
+    const query = {};
+
+    // Convert string IDs to ObjectId if needed
+    if (district && district !== "30") {
+      if (mongoose.Types.ObjectId.isValid(district)) {
+        query.district = mongoose.Types.ObjectId(district);
+      } else {
+        // Invalid id, return empty result early
+        return res.json([]);
+      }
+    }
+
+    if (taluk && taluk !== "30") {
+      if (mongoose.Types.ObjectId.isValid(taluk)) {
+        query.taluk = mongoose.Types.ObjectId(taluk);
+      } else {
+        return res.json([]);
+      }
+    }
+
+    // Temporarily comment this out to debug or use if your data has this label exactly
+    // query["values.label"] = "ID card";
+
+    console.log("Running query:", query);
+
+    const submissions = await MembershipSubmission.find(query)
+      .populate("district", "name k_name")
+      .populate("taluk", "name k_name")
+      .lean();
+
+    console.log("Number of submissions found:", submissions.length);
+
+    // If you want to populate media inside values:
+    const response = await Promise.all(
+      submissions.map(async (submission) => {
+        const populatedValues = await Promise.all(
+          (submission.values || []).map(async (val) => {
+            if (val.media && val.media.length > 0) {
+              const mediaDocs = await Media.find({ _id: { $in: val.media } }).lean();
+              return { ...val, media: mediaDocs };
+            }
+            return val;
+          })
+        );
+        return { ...submission, values: populatedValues };
+      })
+    );
+
+    res.json(response);
+  } catch (error) {
+    console.error("Error fetching filtered membership submissions:", error);
+    res.status(500).json({ message: "Error fetching submissions", error: error.message });
+  }
+};

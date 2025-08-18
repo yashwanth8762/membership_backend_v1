@@ -14,4 +14,8 @@ router.post('/submit', membershipController.submitMembership);
 // User: Get a membership submission by membershipId
 router.get('/submission/:membershipId', membershipController.getMembershipById);
 
+// User: Get all membership submissions filtered by district, taluk, and must include "ID card"
+router.get('/submissions', membershipController.getMembershipsFiltered);
+
+
 module.exports = router; 
