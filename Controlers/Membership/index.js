@@ -169,17 +169,15 @@ exports.getMembershipById = async (req, res) => {
     res.status(500).json({ message: 'Error fetching membership', error: error.message });
   }
 }; 
-
 exports.getMembershipsFiltered = async (req, res) => {
   try {
     let { district, taluk } = req.query;
-
     const query = {};
 
     // Convert string IDs to ObjectId if needed
     if (district && district !== "30") {
       if (mongoose.Types.ObjectId.isValid(district)) {
-        query.district = mongoose.Types.ObjectId(district);
+        query.district = new mongoose.Types.ObjectId(district);
       } else {
         // Invalid id, return empty result early
         return res.json([]);
@@ -188,13 +186,13 @@ exports.getMembershipsFiltered = async (req, res) => {
 
     if (taluk && taluk !== "30") {
       if (mongoose.Types.ObjectId.isValid(taluk)) {
-        query.taluk = mongoose.Types.ObjectId(taluk);
+        query.taluk = new mongoose.Types.ObjectId(taluk);
       } else {
         return res.json([]);
       }
     }
 
-    // Temporarily comment this out to debug or use if your data has this label exactly
+    // Optionally filter by a field in the values array (uncomment if needed)
     // query["values.label"] = "ID card";
 
     console.log("Running query:", query);
@@ -206,7 +204,7 @@ exports.getMembershipsFiltered = async (req, res) => {
 
     console.log("Number of submissions found:", submissions.length);
 
-    // If you want to populate media inside values:
+    // Deeply populate media arrays inside 'values'
     const response = await Promise.all(
       submissions.map(async (submission) => {
         const populatedValues = await Promise.all(
