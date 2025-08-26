@@ -34,41 +34,92 @@ exports.getForms = async (req, res) => {
 };
 
 // User: Submit a membership form
+// exports.submitMembership = async (req, res) => {
+//   try {
+//     const { formId, district, taluk, values } = req.body;
+    
+//     // Validate required fields
+//     if (!formId) {
+//       return res.status(400).json({ message: 'Form ID is required' });
+//     }
+    
+//     if (!district) {
+//       return res.status(400).json({ message: 'District is required' });
+//     }
+    
+//     if (!taluk) {
+//       return res.status(400).json({ message: 'Taluk is required' });
+//     }
+    
+//     // Generate a random membershipId
+//     const membershipId = crypto.randomBytes(8).toString('hex');
+    
+//     // Process values to separate media IDs from regular values
+//     const processedValues = values.map(item => {
+//       if (Array.isArray(item.value) && item.value.length > 0 && item.value[0] !== null) {
+//         // This is a media field, store media IDs in media array
+//         return {
+//           label: item.label,
+//           value: item.value, // Keep the array as value
+//           media: item.value.filter(id => id !== null) // Store non-null IDs in media array
+//         };
+//       } else {
+//         // This is a regular field
+//         return {
+//           label: item.label,
+//           value: item.value,
+//           media: item.media || [] // Use provided media array or empty array
+//         };
+//       }
+//     });
+
+//     const submission = new MembershipSubmission({
+//       membershipId,
+//       formId,
+//       district,
+//       taluk,
+//       values: processedValues,
+//     });
+//     await submission.save();
+//     res.status(201).json({ membershipId, submission });
+//   } catch (error) {
+//     console.error('Error in submitMembership:', error);
+//     res.status(500).json({ message: 'Error submitting membership', error: error.message });
+//   }
+// };
+
+
 exports.submitMembership = async (req, res) => {
   try {
-    const { formId, district, taluk, values } = req.body;
-    
-    // Validate required fields
-    if (!formId) {
-      return res.status(400).json({ message: 'Form ID is required' });
+    const { formId, district, taluk, adhar_no, email, bloodGroup, values } = req.body;
+
+    if (!formId) return res.status(400).json({ message: "Form ID is required" });
+    if (!district) return res.status(400).json({ message: "District is required" });
+    if (!taluk) return res.status(400).json({ message: "Taluk is required" });
+    if (!adhar_no) return res.status(400).json({ message: "Adhar number is required" });
+    if (!email) return res.status(400).json({ message: "Email is required" });
+    if (!Array.isArray(values)) return res.status(400).json({ message: "Values array is required" });
+
+    const existingAdhar = await MembershipSubmission.findOne({ adhar_no });
+    if (existingAdhar) {
+      return res.status(400).json({ message: "A membership with this Adhar number already exists." });
     }
-    
-    if (!district) {
-      return res.status(400).json({ message: 'District is required' });
-    }
-    
-    if (!taluk) {
-      return res.status(400).json({ message: 'Taluk is required' });
-    }
-    
-    // Generate a random membershipId
-    const membershipId = crypto.randomBytes(8).toString('hex');
-    
-    // Process values to separate media IDs from regular values
-    const processedValues = values.map(item => {
+
+    const membershipId = crypto.randomBytes(8).toString("hex");
+
+    // Process values array: separate media from normal values
+    const processedValues = values.map((item) => {
       if (Array.isArray(item.value) && item.value.length > 0 && item.value[0] !== null) {
-        // This is a media field, store media IDs in media array
-        return {
-          label: item.label,
-          value: item.value, // Keep the array as value
-          media: item.value.filter(id => id !== null) // Store non-null IDs in media array
-        };
-      } else {
-        // This is a regular field
         return {
           label: item.label,
           value: item.value,
-          media: item.media || [] // Use provided media array or empty array
+          media: item.value.filter((id) => id !== null),
+        };
+      } else {
+        return {
+          label: item.label,
+          value: item.value,
+          media: item.media || [],
         };
       }
     });
@@ -78,13 +129,18 @@ exports.submitMembership = async (req, res) => {
       formId,
       district,
       taluk,
+      adhar_no,
+      email,
+      bloodGroup,
       values: processedValues,
     });
+
     await submission.save();
+
     res.status(201).json({ membershipId, submission });
   } catch (error) {
-    console.error('Error in submitMembership:', error);
-    res.status(500).json({ message: 'Error submitting membership', error: error.message });
+    console.error("Error in submitMembership:", error);
+    res.status(500).json({ message: "Error submitting membership", error: error.message });
   }
 };
 
