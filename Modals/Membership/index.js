@@ -105,7 +105,7 @@ const membershipSubmissionSchema = new Schema({
   taluk: { type: ObjectId, ref: 'taluk', required: true },
 
   adhar_no: { type: String, required: true, unique: true },
-  email: { type: String, required: true },
+  email: { type: String},
   bloodGroup: { type: String, required: false },
 
   values: [
