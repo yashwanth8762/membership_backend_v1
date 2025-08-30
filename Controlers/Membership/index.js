@@ -357,7 +357,7 @@ exports.submitMembership = async (req, res) => {
     if (!district) return res.status(400).json({ message: "District is required" });
     if (!taluk) return res.status(400).json({ message: "Taluk is required" });
     if (!adhar_no) return res.status(400).json({ message: "Adhar number is required" });
-    if (!email) return res.status(400).json({ message: "Email is required" });
+    // if (!email) return res.status(400).json({ message: "Email is required" });
     if (!Array.isArray(values)) return res.status(400).json({ message: "Values array is required" });
 
     const existingAdhar = await MembershipSubmission.findOne({ adhar_no });
