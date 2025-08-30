@@ -17,29 +17,19 @@ const membershipPrefixMap = {
 };
 
 // Helper: atomic sequential membership ID generator
-// async function getNextMembershipId(membershipAmount) {
-//   const prefix = membershipPrefixMap[membershipAmount] || 'G';
+async function getNextMembershipId(membershipAmount) {
+  const prefix = membershipPrefixMap[membershipAmount] || 'G';
 
-//   const updatedCounter = await MembershipCounter.findOneAndUpdate(
-//     { prefix },
-//     { $inc: { lastNumber: 1 } },
-//     { new: true, upsert: true }
-//   );
-
-//   const numberStr = updatedCounter.lastNumber.toString().padStart(3, '0');
-//   return `${prefix}-${numberStr}`;
-// }
-
-// Helper: global atomic sequential membership ID generator (no prefix)
-async function getNextMembershipId() {
   const updatedCounter = await MembershipCounter.findOneAndUpdate(
-    { prefix: 'GLOBAL' }, // Use a static document
+    { prefix },
     { $inc: { lastNumber: 1 } },
     { new: true, upsert: true }
   );
-  const numberStr = updatedCounter.lastNumber.toString().padStart(6, '0');
-  return numberStr; // Only the number, no prefix
+
+  const numberStr = updatedCounter.lastNumber.toString().padStart(3, '0');
+  return `${prefix}-${numberStr}`;
 }
+
 
 // Admin: Create a new membership form structure
 exports.createForm = async (req, res) => {
