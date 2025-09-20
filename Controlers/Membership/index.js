@@ -4,6 +4,13 @@ const Taluk = require('../../Modals/Taluk');
 // const MembershipCounter = require('../../Modals/Membership'); // You must create this schema/model
 const mongoose = require('mongoose');
 const { MembershipForm, MembershipSubmission,MembershipCounter } = require('../../Modals/Membership');
+const {StandardCheckoutClient, Env, StandardCheckoutPayRequest} = require('pg-sdk-node')
+const clientId = process.env.CLIENT_ID
+const clientSecret = process.env.CLIENT_SECRET
+const clientVersion = 1
+const env = Env.SANDBOX
+const client = StandardCheckoutClient.getInstance(clientId,clientSecret,clientVersion,env)
+
 
 
 // Map membership amount to prefix letters for ID generation
@@ -63,28 +70,29 @@ exports.getForms = async (req, res) => {
 // User: Submit a membership form with sequential membership ID generation
 exports.submitMembership = async (req, res) => {
   try {
-    const { formId, district, taluk, adhar_no, email, bloodGroup, values } = req.body;
+    const { formId, district, taluk, adhar_no, email, bloodGroup, values, paymentResult } = req.body;
 
+    // Required field validation
     if (!formId) return res.status(400).json({ message: "Form ID is required" });
     if (!district) return res.status(400).json({ message: "District is required" });
     if (!taluk) return res.status(400).json({ message: "Taluk is required" });
     if (!adhar_no) return res.status(400).json({ message: "Adhar number is required" });
-    // if (!email) return res.status(400).json({ message: "Email is required" });
     if (!Array.isArray(values)) return res.status(400).json({ message: "Values array is required" });
 
+    // Prevent duplicate Aadhaar number
     const existingAdhar = await MembershipSubmission.findOne({ adhar_no });
     if (existingAdhar) {
       return res.status(400).json({ message: "A membership with this Adhar number already exists." });
     }
 
-    // Extract membership amount from values (fall back to 500)
+    // Extract membership amount, default to 500
     const membershipAmountEntry = values.find(v => v.label === "Membership Amount");
     const membershipAmount = membershipAmountEntry ? parseInt(membershipAmountEntry.value) : 500;
 
-    // Generate sequential membership ID with prefix
+    // Generate sequential membership ID with prefix (implement this utility)
     const membershipId = await getNextMembershipId(membershipAmount);
 
-    // Process values array to separate media IDs
+    // Process values array and extract media IDs
     const processedValues = values.map((item) => {
       if (Array.isArray(item.value) && item.value.length > 0 && item.value[0] !== null) {
         return {
@@ -101,6 +109,7 @@ exports.submitMembership = async (req, res) => {
       }
     });
 
+    // Create submission document and save before payment
     const submission = new MembershipSubmission({
       membershipId,
       formId,
@@ -115,12 +124,30 @@ exports.submitMembership = async (req, res) => {
 
     await submission.save();
 
-    res.status(201).json({ membershipId, submission });
+    // Setup payment redirect
+    // const redirectUrl = `http://localhost:5000/membership/check-status?merchantOrderId=${membershipId}`;
+    const redirectUrl = `https://www.madaramahasabha.com/api/membership/check-status?merchantOrderId=${membershipId}`;
+
+    const request = StandardCheckoutPayRequest
+      .builder(membershipId)
+      .amount(membershipAmount)
+      .redirectUrl(redirectUrl)
+      .build();
+
+    const paymentResponse = await client.pay(request);
+
+    // Unified response (no code after return)
+    return res.status(201).json({
+      membershipId,
+      submission,
+      checkoutPageUrl: paymentResponse.redirectUrl
+    });
   } catch (error) {
     console.error("Error in submitMembership:", error);
     res.status(500).json({ message: "Error submitting membership", error: error.message });
   }
 };
+
 
 
 // User: Get a membership submission by membershipId
@@ -228,5 +255,41 @@ exports.getMembershipsFiltered = async (req, res) => {
   } catch (error) {
     console.error("Error fetching filtered membership submissions:", error);
     res.status(500).json({ message: "Error fetching submissions", error: error.message });
+  }
+};
+
+
+exports.getStatusOfPayment = async (req, res) => {
+  console.log('getStatusOfPayment invoked with query:', req.query);
+
+  try {
+    const { merchantOrderId } = req.query;
+    if (!merchantOrderId) {
+      return res.status(400).send("MerchantOrderId is required");
+    }
+    const responce = await client.getOrderStatus(merchantOrderId);
+    const status = responce.state;
+
+    // Update paymentResult.status before redirecting
+    if (status === 'COMPLETED') {
+      await MembershipSubmission.findOneAndUpdate(
+        { membershipId: merchantOrderId },
+        { 
+          'paymentResult.status': 'COMPLETED' // update to capital since your provider returns this
+        }
+      );
+      return res.redirect('https://www.madaramahasabha.com/payment-success');
+    } else {
+      await MembershipSubmission.findOneAndUpdate(
+        { membershipId: merchantOrderId },
+        { 
+          'paymentResult.status': 'FAILURE'
+        }
+      );
+      return res.redirect('https://www.madaramahasabha.com/payment-failure');
+    }
+
+  } catch (error) {
+   console.log('error while Payment', error);
   }
 };

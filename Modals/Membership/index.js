@@ -103,7 +103,9 @@ const membershipSubmissionSchema = new Schema({
   formId: { type: ObjectId, ref: 'membership_form', required: true },
   district: { type: ObjectId, ref: 'district', required: true },
   taluk: { type: ObjectId, ref: 'taluk', required: true },
-
+  paymentResult: {
+    status: String,
+  },
   adhar_no: { type: String, required: true, unique: true },
   email: { type: String},
   bloodGroup: { type: String, required: false },

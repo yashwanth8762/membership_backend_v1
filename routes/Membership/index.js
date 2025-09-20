@@ -11,6 +11,10 @@ router.get('/form', membershipController.getForms);
 // User: Submit a membership form
 router.post('/submit', membershipController.submitMembership);
 
+
+router.get('/check-status', membershipController.getStatusOfPayment);
+
+
 // User: Get a membership submission by membershipId
 router.get('/submission/:membershipId', membershipController.getMembershipById);
 
