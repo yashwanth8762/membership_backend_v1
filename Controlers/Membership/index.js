@@ -8,7 +8,7 @@ const {StandardCheckoutClient, Env, StandardCheckoutPayRequest} = require('pg-sd
 const clientId = process.env.CLIENT_ID
 const clientSecret = process.env.CLIENT_SECRET
 const clientVersion = 1
-const env = Env.SANDBOX
+const env = Env.PRODUCTION
 const client = StandardCheckoutClient.getInstance(clientId,clientSecret,clientVersion,env)
 
 
