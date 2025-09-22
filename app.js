@@ -57,6 +57,7 @@ const programRoutes = require('./routes/UpcommingPrograms');
 const galleryRoutes = require('./routes/Gallary');
 const districtRoutes = require('./routes/district');
 const talukRoutes = require('./routes/taluk');
+const donationRoutes = require('./routes/Donation')
 
 
 
@@ -71,6 +72,7 @@ app.use(`${API_ROOT}upcommingprograms`, programRoutes);
 app.use(`${API_ROOT}gallery`, galleryRoutes);
 app.use(`${API_ROOT}district`, districtRoutes);
 app.use(`${API_ROOT}taluk`, talukRoutes);
+app.use(`${API_ROOT}donation`, donationRoutes)
 
 
 
