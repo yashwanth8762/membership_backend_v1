@@ -122,7 +122,7 @@ exports.submitMembership = async (req, res) => {
     console.log('merchantOrderId passed:', merchantOrderId);
 
     // Setup redirect URL with merchantOrderId
-    const redirectUrl = `https://www.madaramahasabha.com/membership/check-status?merchantOrderId=${merchantOrderId}`;
+    const redirectUrl = `https://www.madaramahasabha.com/api/membership/check-status?merchantOrderId=${merchantOrderId}`;
     // Use your production URL as needed:
     // const redirectUrl = `https://www.madaramahasabha.com/api/membership/check-status?merchantOrderId=${merchantOrderId}`;
 
