@@ -1062,3 +1062,4 @@ exports.getStatusOfPayment = async (req, res) => {
     return res.status(500).send('Internal server error during payment status check');
   }
 };
+
