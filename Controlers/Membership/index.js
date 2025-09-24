@@ -1086,7 +1086,7 @@ exports.redirectToUserMembershipPage = async (req, res) => {
       console.warn('QR redirect existence check failed:', e?.message);
     }
 
-    const frontendBase = process.env.FRONTEND_BASE_URL || 'https://www.madaramahasabha.com';
+    const frontendBase = 'https://www.madaramahasabha.com';
     const redirectUrl = `${frontendBase}/user/${encodeURIComponent(membershipId)}`;
     return res.redirect(302, redirectUrl);
   } catch (error) {
