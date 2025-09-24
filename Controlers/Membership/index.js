@@ -1062,4 +1062,37 @@ exports.getStatusOfPayment = async (req, res) => {
     return res.status(500).send('Internal server error during payment status check');
   }
 };
+// Redirect QR scans to the public frontend user details page
+exports.redirectToUserMembershipPage = async (req, res) => {
+  try {
+    const { membershipId } = req.params;
+    if (!membershipId) return res.status(400).send('membershipId is required');
+
+    // Basic existence check to avoid redirecting to 404 for obvious typos
+    // but do not block redirect if DB temporarily unavailable
+    try {
+      let exists = null;
+      if (mongoose.Types.ObjectId.isValid(membershipId)) {
+        exists = await MembershipSubmission.findById(membershipId).select('_id membershipId');
+      }
+      if (!exists) {
+        exists = await MembershipSubmission.findOne({ membershipId }).select('_id membershipId');
+      }
+      if (!exists) {
+        // Still redirect; frontend can show a friendly not-found page
+        console.warn('QR redirect: membership not found for', membershipId);
+      }
+    } catch (e) {
+      console.warn('QR redirect existence check failed:', e?.message);
+    }
+
+    const frontendBase = process.env.FRONTEND_BASE_URL || 'https://www.madaramahasabha.com';
+    const redirectUrl = `${frontendBase}/user/${encodeURIComponent(membershipId)}`;
+    return res.redirect(302, redirectUrl);
+  } catch (error) {
+    console.error('Error in redirectToUserMembershipPage:', error);
+    return res.status(500).send('Internal server error');
+  }
+};
+
 

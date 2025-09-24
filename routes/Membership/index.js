@@ -18,6 +18,9 @@ router.get('/check-status', membershipController.getStatusOfPayment);
 // User: Get a membership submission by membershipId
 router.get('/submission/:membershipId', membershipController.getMembershipById);
 
+// QR landing: Redirect to frontend user membership page
+router.get('/user/:membershipId', membershipController.redirectToUserMembershipPage);
+
 // User: Get all membership submissions filtered by district, taluk, and must include "ID card"
 router.get('/submissions', membershipController.getMembershipsFiltered);
 
