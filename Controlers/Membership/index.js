@@ -1087,7 +1087,8 @@ exports.redirectToUserMembershipPage = async (req, res) => {
     }
 
     const frontendBase = 'https://www.madaramahasabha.com';
-    const redirectUrl = `${frontendBase}/user/${encodeURIComponent(membershipId)}`;
+    // Frontend route expects /membership/user/:membershipId
+    const redirectUrl = `${frontendBase}/membership/user/${encodeURIComponent(membershipId)}`;
     return res.redirect(302, redirectUrl);
   } catch (error) {
     console.error('Error in redirectToUserMembershipPage:', error);
