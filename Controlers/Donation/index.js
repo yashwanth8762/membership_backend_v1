@@ -160,7 +160,55 @@ exports.submitDonation = async (req, res) => {
         } else {
           console.log('No valid mobile number found for WhatsApp/SMS message');
         }
+        if (mobileNumber) {
+          const MSG91_AUTHKEY = process.env.MSG91_AUTHKEY || '462122ASu5sdOuq6889b2bcP1';
+          const firstName = firstName
   
+          // Bulk message payload as per your initial template curl example
+          const messagePayload = {
+            integrated_number: "15558848753",
+            content_type: "template",
+            payload: {
+              messaging_product: "whatsapp",
+              type: "template",
+              template: {
+                name: "donation",
+                language: {
+                  code: "en_GB",
+                  policy: "deterministic"
+                },
+                namespace: "33b99d31_01ca_42e2_83fc_59571bba67f6",
+                to_and_components: [
+                  {
+                    to: [mobileNumber],
+                    components: {
+                      body_1: {
+                        type: "text",
+                        value: firstName
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          };
+  
+          const apiURL = 'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
+  
+          try {
+            const axiosResponse = await axios.post(apiURL, messagePayload, {
+              headers: {
+                'authkey': MSG91_AUTHKEY,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              maxRedirects: 5
+            });
+            console.log('WhatsApp API bulk message response:', axiosResponse.data);
+          } catch (error) {
+            console.error('Failed to send WhatsApp bulk message:', error.response?.data || error.message || error);
+          }
+        }
         // Example: Send SMS template with firstName variable
         try {
           if (mobileNumberSMS && firstName) {
