@@ -137,7 +137,7 @@ exports.submitDonation = async (req, res) => {
         const mobileNumber = updated.mobile ? updated.mobile.trim() : '';
         const firstName = updated.firstName ? updated.firstName.trim() : 'Friend';
   
-        console.log('mobileNumber:', mobileNumber, 'firstName:', firstName);
+        // console.log('mobileNumber:', mobileNumber, 'firstName:', firstName);
   
         // Normalize mobile number for SMS (no +) and WhatsApp (+)
         let mobileNumberSMS = '';
@@ -162,7 +162,7 @@ exports.submitDonation = async (req, res) => {
         }
         if (mobileNumber) {
           const MSG91_AUTHKEY = process.env.MSG91_AUTHKEY || '462122ASu5sdOuq6889b2bcP1';
-          const firstName = firstName
+          const name = firstName
   
           // Bulk message payload as per your initial template curl example
           const messagePayload = {
@@ -184,7 +184,7 @@ exports.submitDonation = async (req, res) => {
                     components: {
                       body_1: {
                         type: "text",
-                        value: firstName
+                        value: name
                       }
                     }
                   }
