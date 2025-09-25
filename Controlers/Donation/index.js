@@ -180,7 +180,7 @@ exports.submitDonation = async (req, res) => {
                 namespace: "33b99d31_01ca_42e2_83fc_59571bba67f6",
                 to_and_components: [
                   {
-                    to: [mobileNumber],
+                    to: [mobileNumberWA],
                     components: {
                       body_1: {
                         type: "text",
