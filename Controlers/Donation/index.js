@@ -69,10 +69,10 @@ exports.submitDonation = async (req, res) => {
     }
   };
 
-  async function sendSmsViaMsg91(mobileNumber, name) {
+  async function sendSmsViaMsg91(mobileNumber, firstName) {
     const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
     const MSG91_TEMPLATE_ID = process.env.MSG91_DONATION_TEMPLATE_ID; // Flow ID from MSG91
-    console.log('name in side the message function',name)
+    console.log('name in side the message function',firstName)
     const payload = {
       template_id: MSG91_TEMPLATE_ID,
       short_url: "0",
@@ -81,7 +81,7 @@ exports.submitDonation = async (req, res) => {
       recipients: [
         {
           mobiles: mobileNumber,
-          name: name // Must match the variable key in MSG91/DLT template!
+          var: firstName // Must match the variable key in MSG91/DLT template!
         }
       ]
     };
