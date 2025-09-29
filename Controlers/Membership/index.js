@@ -92,9 +92,6 @@ exports.submitMembership = async (req, res) => {
     const membershipAmountEntry = values.find(v => v.label === "Membership Amount");
     const membershipAmount = membershipAmountEntry ? parseInt(membershipAmountEntry.value) : 500;
 
-    // Generate membershipId if needed
-    const membershipId = await getNextMembershipId(membershipAmount);
-
     // Process values array for media
     const processedValues = values.map(item => ({
       label: item.label,
@@ -106,7 +103,6 @@ exports.submitMembership = async (req, res) => {
     
     // Create and save membership submission
     const submission = new MembershipSubmission({
-      membershipId,
       formId,
       district,
       taluk,
@@ -144,7 +140,7 @@ exports.submitMembership = async (req, res) => {
     const paymentResponse = await client.pay(request);
 
     return res.status(201).json({
-      membershipId,
+      membershipId: null,
       submission,
       checkoutPageUrl: paymentResponse.redirectUrl
     });
@@ -276,497 +272,6 @@ exports.getMembershipsFiltered = async (req, res) => {
 };
 
 
-
-// exports.getStatusOfPayment = async (req, res) => {
-//   console.log('getStatusOfPayment invoked with query:', req.query);
-
-//   try {
-//     const { merchantOrderId } = req.query;
-//     if (!merchantOrderId) {
-//       return res.status(400).send("MerchantOrderId is required");
-//     }
-//     const response = await client.getOrderStatus(merchantOrderId);
-//     const status = response.state;
-
-//     // Update paymentResult.status before redirecting
-//     if (status === 'COMPLETED') {
-//       const updated = await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         { 
-//           'paymentResult.status': 'COMPLETED',
-//           'paymentResult.paymentDate': new Date(),
-//           'paymentResult.phonepeResponse': response
-//         },
-//         { new: true }
-//       );
-
-//       // Send WhatsApp via MSG91 (best-effort)
-//       try {
-//         const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
-//         const MSG91_INTEGRATED_NUMBER = process.env.MSG91_INTEGRATED_NUMBER || '15558848753';
-//         const MSG91_NAMESPACE = process.env.MSG91_NAMESPACE || '33b99d31_01ca_42e2_83fc_59571bba67f6';
-//         const TEMPLATE_NAME = process.env.MSG91_TEMPLATE_NAME || 'madara';
-
-//         let mobileNumber = '';
-//         if (updated && Array.isArray(updated.values)) {
-//           const mobileField = updated.values.find(v =>
-//             (v.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v.label))) ||
-//             (v._doc && v._doc.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v._doc.label)))
-//           );
-//           if (mobileField) mobileNumber = (mobileField.value || mobileField._doc?.value || '').toString().trim();
-//         }
-
-//         // Normalize number with country code prefix
-//         if (mobileNumber) {
-//           const digits = mobileNumber.replace(/\D/g, '');
-//           if (digits.length === 10) {
-//             mobileNumber = `91${digits}`;
-//           } else if (digits.startsWith('91') && digits.length === 12) {
-//             mobileNumber = digits;
-//           } else {
-//             mobileNumber = digits;
-//           }
-//         }
-
-//         console.log('mobileNumber_normalized', mobileNumber, 'namespace', MSG91_NAMESPACE, 'integrated', MSG91_INTEGRATED_NUMBER);
-
-//         if (mobileNumber && MSG91_AUTHKEY) {
-//           const payload = {
-//             integrated_number: MSG91_INTEGRATED_NUMBER,
-//             content_type: 'template',
-//             payload: {
-//               messaging_product: 'whatsapp',
-//               to: mobileNumber,
-//               type: 'template',
-//               template: {
-//                 name: TEMPLATE_NAME,
-//                 language: { code: 'en', policy: 'deterministic' },
-//                 namespace: MSG91_NAMESPACE,
-//                 components: [
-//                   {
-//                     type: 'body',
-//                     parameters: [
-//                       { type: 'text', text: 'value1' }
-//                     ]
-//                   }
-//                 ]
-//               }
-//             }
-//           };
-
-//           const apiResponse = await axios.post(
-//             'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/',
-//             payload,
-//             { headers: { 'Content-Type': 'application/json', authkey: MSG91_AUTHKEY } }
-//           );
-
-//           console.log('MSG91 WhatsApp API response:', apiResponse.data);
-//         }
-//       } catch (waErr) {
-//         console.log('MSG91 WhatsApp send failed:', waErr?.response?.data || waErr.message);
-//       }
-
-//       return res.redirect(`http://localhost:5173/payment-success?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-success?merchantOrderId=${merchantOrderId}`);
-//     } else {
-//       await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         { 
-//           'paymentResult.status': 'FAILED',
-//           'paymentResult.phonepeResponse': response
-//         }
-//       );
-//       return res.redirect(`http://localhost:5173/payment-failure?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-failure?merchantOrderId=${merchantOrderId}`);
-//     }
-
-//   } catch (error) {
-//     console.log('error while Payment', error);
-//     res.status(500).send('Internal server error during payment status check');
-//   }
-// };
-
-
-
-// async function sendSmsViaMsg91(mobileNumber, message) {
-//   const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1'; // Your MSG91 authkey
-//   const MSG91_SENDER_ID = process.env.MSG91_SENDER_ID || 'ISHAMS'; // DLT-approved sender ID
-//   const MSG91_ROUTE = '4'; // Transactional route for SMS
-// console.log('inside the sms');
-
-//   try {
-//     const params = new URLSearchParams({
-//       authkey: MSG91_AUTHKEY,
-//       mobiles: mobileNumber,
-//       message: message,
-//       sender: MSG91_SENDER_ID,
-//       route: MSG91_ROUTE,
-//       country: '91',
-//     });
-
-//     const response = await axios.get(`https://api.msg91.com/api/sendhttp.php?${params.toString()}`);
-
-//     console.log('MSG91 SMS API response:', response.data);
-//     return response.data;
-//   } catch (error) {
-//     console.error('Error sending SMS via MSG91:', error.response?.data || error.message);
-//     throw error;
-//   }
-// }
-
-// function personalizeSms(template, membershipId) {
-//   return template.replace('##var##', membershipId);
-// }
-
-// exports.getStatusOfPayment = async (req, res) => {
-//   console.log('getStatusOfPayment invoked with query:', req.query);
-
-//   try {
-//     const { merchantOrderId } = req.query;
-//     if (!merchantOrderId) {
-//       return res.status(400).send("MerchantOrderId is required");
-//     }
-//     const response = await client.getOrderStatus(merchantOrderId);
-//     const status = response.state;
-
-//     if (status === 'COMPLETED') {
-//       const updated = await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         { 
-//           'paymentResult.status': 'COMPLETED',
-//           'paymentResult.paymentDate': new Date(),
-//           'paymentResult.phonepeResponse': response
-//         },
-//         { new: true }
-//       );
-
-//       // Extract mobile number
-//       let mobileNumber = '';
-//       if (updated && Array.isArray(updated.values)) {
-//         const mobileField = updated.values.find(v =>
-//           (v.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v.label))) ||
-//           (v._doc && v._doc.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v._doc.label)))
-//         );
-//         if (mobileField) mobileNumber = (mobileField.value || mobileField._doc?.value || '').toString().trim();
-//       }
-
-//       // Normalize mobile number with country code
-//       if (mobileNumber) {
-//         const digits = mobileNumber.replace(/\D/g, '');
-//         if (digits.length === 10) {
-//           mobileNumber = `91${digits}`;
-//         } else if (digits.startsWith('91') && digits.length === 12) {
-//           mobileNumber = digits;
-//         } else {
-//           mobileNumber = digits;
-//         }
-//       }
-
-//       console.log('mobileNumber_normalized', mobileNumber);
-
-//       // Send WhatsApp message via MSG91
-//       try {
-//         const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
-//         const MSG91_INTEGRATED_NUMBER = process.env.MSG91_INTEGRATED_NUMBER || '15558848753';
-//         const MSG91_NAMESPACE = process.env.MSG91_NAMESPACE || '33b99d31_01ca_42e2_83fc_59571bba67f6';
-//         const TEMPLATE_NAME = process.env.MSG91_TEMPLATE_NAME || 'madara';
-
-//         if (mobileNumber && MSG91_AUTHKEY) {
-//           const payload = {
-//             integrated_number: MSG91_INTEGRATED_NUMBER,
-//             content_type: 'template',
-//             payload: {
-//               messaging_product: 'whatsapp',
-//               to: mobileNumber,
-//               type: 'template',
-//               template: {
-//                 name: TEMPLATE_NAME,
-//                 language: { code: 'en', policy: 'deterministic' },
-//                 namespace: MSG91_NAMESPACE,
-//                 components: [
-//                   {
-//                     type: 'body',
-//                     parameters: [
-//                       { type: 'text', text: 'value1' }
-//                     ]
-//                   }
-//                 ]
-//               }
-//             }
-//           };
-
-//           const apiResponse = await axios.post(
-//             'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/',
-//             payload,
-//             { headers: { 'Content-Type': 'application/json', authkey: MSG91_AUTHKEY } }
-//           );
-
-//           console.log('MSG91 WhatsApp API response:', apiResponse.data);
-//         }
-//       } catch (waErr) {
-//         console.log('MSG91 WhatsApp send failed:', waErr?.response?.data || waErr.message);
-//       }
-
-//       // Prepare SMS content and send SMS
-//       const smsTemplate = `
-// Application Accepted
-// We have accepted your application request for General Membership under Karnataka Madara Mahasabha and received Membership Fee.
-// You are now successfully registered under General Membership.
-// Membership ID: ##var##
-// Welcome to the Mahasabha family!
-//       `;
-
-//       const smsMessage = personalizeSms(smsTemplate, updated.membershipId);
-
-//       try {
-//         if (mobileNumber) {
-//           await sendSmsViaMsg91(mobileNumber, smsMessage);
-//         }
-//       } catch (smsErr) {
-//         console.log('MSG91 SMS send failed:', smsErr?.response?.data || smsErr.message);
-//       }
-
-//       return res.redirect(`http://localhost:5174/payment-success?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-success?merchantOrderId=${merchantOrderId}`);
-//     } else {
-//       await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         { 
-//           'paymentResult.status': 'FAILED',
-//           'paymentResult.phonepeResponse': response
-//         }
-//       );
-//       return res.redirect(`http://localhost:5174/payment-failure?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-failure?merchantOrderId=${merchantOrderId}`);
-//     }
-
-//   } catch (error) {
-//     console.log('error while Payment', error);
-//     res.status(500).send('Internal server error during payment status check');
-//   }
-// };
-
-// const axios = require('axios');
-
-// async function sendSmsViaMsg91(mobileNumber, membershipId) {
-//   const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
-//   const MSG91_TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID || 'YourMsg91TemplateID';
-
-//   try {
-//     const payload = {
-//       template_id: MSG91_TEMPLATE_ID,
-//       short_url: "0",
-//       realTimeResponse: "1",
-//       smsroute: "4",  // Required to avoid "Route Missing" error
-//       recipients: [
-//         {
-//           mobiles: mobileNumber,
-//           VAR1: membershipId,
-//         }
-//       ],
-//     };
-
-//     const response = await axios.post(
-//       'https://control.msg91.com/api/v5/flow',
-//       payload,
-//       { headers: { 'Content-Type': 'application/json', authkey: MSG91_AUTHKEY } }
-//     );
-
-//     console.log('MSG91 SMS Template API response:', response.data);
-//     return response.data;
-//   } catch (error) {
-//     console.error('Error sending SMS via MSG91 Template API:', error.response?.data || error.message);
-//     throw error;
-//   }
-// }
-
-
-// async function sendSmsViaMsg91(mobileNumber, membershipId) {
-//   const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
-//   const MSG91_TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID || 'YourMsg91TemplateID';
-//   console.log('membershipId', membershipId);
-
-//   try {
-//     const payload = {
-//       template_id: MSG91_TEMPLATE_ID,
-//       short_url: "0",
-//       realTimeResponse: "1",
-//       smsroute: "4",
-//       recipients: [
-//         {
-//           mobiles: mobileNumber,
-//           VAR1: membershipId,  
-//         }
-//       ],
-//     };
-
-//     const response = await axios.post(
-//       'https://control.msg91.com/api/v5/flow',
-//       payload,
-//       { headers: { 'Content-Type': 'application/json', authkey: MSG91_AUTHKEY } }
-//     );
-
-//     console.log('MSG91 SMS Template API response:', response.data);
-//     return response.data;
-//   } catch (error) {
-//     console.error('Error sending SMS via MSG91 Template API:', error.response?.data || error.message);
-//     throw error;
-//   }
-// }
-
-
-
-// exports.getStatusOfPayment = async (req, res) => {
-//   console.log('getStatusOfPayment invoked with query:', req.query);
-
-//   try {
-//     const { merchantOrderId } = req.query;
-//     if (!merchantOrderId) {
-//       return res.status(400).send("MerchantOrderId is required");
-//     }
-//     const response = await client.getOrderStatus(merchantOrderId);
-//     const status = response.state;
-
-//     if (status === 'COMPLETED') {
-//       const updated = await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         { 
-//           'paymentResult.status': 'COMPLETED',
-//           'paymentResult.paymentDate': new Date(),
-//           'paymentResult.phonepeResponse': response
-//         },
-//         { new: true }
-//       );
-
-//       // Extract mobile number
-//       let mobileNumber = '';
-//       if (updated && Array.isArray(updated.values)) {
-//         const mobileField = updated.values.find(v =>
-//           (v.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v.label))) ||
-//           (v._doc && v._doc.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v._doc.label)))
-//         );
-//         if (mobileField) mobileNumber = (mobileField.value || mobileField._doc?.value || '').toString().trim();
-//       }
-
-//       // Normalize mobile number with country code
-//       if (mobileNumber) {
-//         const digits = mobileNumber.replace(/\D/g, '');
-//         if (digits.length === 10) {
-//           mobileNumber = `91${digits}`;
-//         } else if (digits.startsWith('91') && digits.length === 12) {
-//           mobileNumber = digits;
-//         } else {
-//           mobileNumber = digits;
-//         }
-//       }
-
-//       console.log('mobileNumber_normalized', mobileNumber);
-
-//       // Send WhatsApp message via MSG91
-//       try {
-//         const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
-//         const MSG91_INTEGRATED_NUMBER = process.env.MSG91_INTEGRATED_NUMBER || '15558848753';
-//         const MSG91_NAMESPACE = process.env.MSG91_NAMESPACE || '33b99d31_01ca_42e2_83fc_59571bba67f6';
-//         const TEMPLATE_NAME = process.env.MSG91_TEMPLATE_NAME || 'madara';
-
-//         if (mobileNumber && MSG91_AUTHKEY) {
-//           const payload = {
-//             integrated_number: MSG91_INTEGRATED_NUMBER,
-//             content_type: 'template',
-//             payload: {
-//               messaging_product: 'whatsapp',
-//               to: mobileNumber,
-//               type: 'template',
-//               template: {
-//                 name: TEMPLATE_NAME,
-//                 language: { code: 'en', policy: 'deterministic' },
-//                 namespace: MSG91_NAMESPACE,
-//                 components: [
-//                   {
-//                     type: 'body',
-//                     parameters: [
-//                       { type: 'text', text: 'value1' }
-//                     ]
-//                   }
-//                 ]
-//               }
-//             }
-//           };
-
-//           const apiResponse = await axios.post(
-//             'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/',
-//             payload,
-//             { headers: { 'Content-Type': 'application/json', authkey: MSG91_AUTHKEY } }
-//           );
-
-//           console.log('MSG91 WhatsApp API response:', apiResponse.data);
-//         }
-//       } catch (waErr) {
-//         console.log('MSG91 WhatsApp send failed:', waErr?.response?.data || waErr.message);
-//       }
-
-//       // Send SMS template message via MSG91 new API
-//       try {
-//         if (mobileNumber && updated.membershipId) {
-//           await sendSmsViaMsg91(mobileNumber, updated.membershipId);
-//         }
-//       } catch (smsErr) {
-//         console.log('MSG91 SMS Template send failed:', smsErr?.response?.data || smsErr.message);
-//       }
-
-//       return res.redirect(`http://localhost:5174/payment-success?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-success?merchantOrderId=${merchantOrderId}`);
-//     } else {
-//       await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         { 
-//           'paymentResult.status': 'FAILED',
-//           'paymentResult.phonepeResponse': response
-//         }
-//       );
-//       return res.redirect(`http://localhost:5174/payment-failure?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-failure?merchantOrderId=${merchantOrderId}`);
-//     }
-//   } catch (error) {
-//     console.log('error while Payment', error);
-//     res.status(500).send('Internal server error during payment status check');
-//   }
-// };
-
-
-// async function sendSmsViaMsg91(mobileNumber, membershipId) {
-//   const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
-//   const MSG91_TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID || 'YourMsg91TemplateID';
-
-//   try {
-//     const payload = {
-//       template_id: MSG91_TEMPLATE_ID,
-//       short_url: "0",
-//       realTimeResponse: "1",
-//       smsroute: "4",
-//       recipients: [
-//         {
-//           mobiles: mobileNumber,
-//           MembershipID: membershipId,
-//         }
-//       ],
-//     };
-
-//     const response = await axios.post(
-//       'https://control.msg91.com/api/v5/flow',
-//       payload,
-//       { headers: { 'Content-Type': 'application/json', authkey: MSG91_AUTHKEY } }
-//     );
-
-//     console.log('MSG91 SMS Template API response:', response.data);
-//     return response.data;
-//   } catch (error) {
-//     console.error('Error sending SMS via MSG91 Template API:', error.response?.data || error.message);
-//     throw error;
-//   }
-// }
-
-
 async function sendSmsViaMsg91(mobileNumber, membershipId) {
   const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
   const MSG91_TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID || 'YourMsg91TemplateID';
@@ -802,131 +307,6 @@ async function sendSmsViaMsg91(mobileNumber, membershipId) {
   }
 }
 
-// exports.getStatusOfPayment = async (req, res) => {
-//   console.log('getStatusOfPayment invoked with query:', req.query);
-
-//   try {
-//     const { merchantOrderId } = req.query;
-//     if (!merchantOrderId) {
-//       return res.status(400).send("MerchantOrderId is required");
-//     }
-
-//     const response = await client.getOrderStatus(merchantOrderId);
-//     const status = response.state;
-
-//     if (status === 'COMPLETED') {
-//       const updated = await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         {
-//           'paymentResult.status': 'COMPLETED',
-//           'paymentResult.paymentDate': new Date(),
-//           'paymentResult.phonepeResponse': response
-//         },
-//         { new: true }
-//       );
-
-//       // Extract mobile number
-//       let mobileNumber = '';
-//       if (updated && Array.isArray(updated.values)) {
-//         const mobileField = updated.values.find(v =>
-//           (v.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v.label))) ||
-//           (v._doc && v._doc.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v._doc.label)))
-//         );
-//         if (mobileField) mobileNumber = (mobileField.value || mobileField._doc?.value || '').toString().trim();
-//       }
-
-//       // Normalize mobile number with country code
-//       if (mobileNumber) {
-//         const digits = mobileNumber.replace(/\D/g, '');
-//         if (digits.length === 10) {
-//           mobileNumber = `91${digits}`;
-//         } else if (digits.startsWith('91') && digits.length === 12) {
-//           mobileNumber = digits;
-//         } else {
-//           mobileNumber = digits;
-//         }
-//       }
-
-//       console.log('mobileNumber_normalized', mobileNumber);
-
-//       // Send WhatsApp message via MSG91 text API with query parameters
-//       if (mobileNumber) {
-//         const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
-//         const MSG91_INTEGRATED_NUMBER = process.env.MSG91_INTEGRATED_NUMBER || '15558848753';
-
-//         const membershipId = updated.membershipId || '';
-
-//         // Construct the WhatsApp message with dynamic membership ID
-//         const messageText = `Application Accepted
-// We have accepted your application request for General Membership under Karnataka Madara Mahasabha and received Membership Fee.
-// You are now successfully registered under General Membership.
-// Membership ID: ${membershipId}
-// Welcome to the Mahasabha family!`;
-
-//         const queryParams = querystring.stringify({
-//           integrated_number: MSG91_INTEGRATED_NUMBER,
-//           recipient_number: mobileNumber,
-//           content_type: 'text',
-//           text: messageText
-//         });
-
-//         const options = {
-//           method: 'POST',
-//           hostname: 'control.msg91.com',
-//           path: `/api/v5/whatsapp/whatsapp-outbound-message/?${queryParams}`,
-//           headers: {
-//             accept: 'application/json',
-//             authkey: MSG91_AUTHKEY,
-//             'content-type': 'application/json',
-//           }
-//         };
-
-//         const req = https.request(options, (res) => {
-//           const chunks = [];
-//           res.on('data', (chunk) => chunks.push(chunk));
-//           res.on('end', () => {
-//             const body = Buffer.concat(chunks).toString();
-//             console.log('WhatsApp API response:', body);
-//           });
-//         });
-
-//         req.on('error', (error) => {
-//           console.error('WhatsApp API request error:', error);
-//         });
-
-//         req.end();
-//       }
-
-//       // Send SMS template via MSG91 API
-//       // try {
-//       //   if (mobileNumber && updated.membershipId) {
-//       //     await sendSmsViaMsg91(mobileNumber, updated.membershipId);
-//       //   }
-//       // } catch (smsErr) {
-//       //   console.log('MSG91 SMS Template send failed:', smsErr?.response?.data || smsErr.message);
-//       // }
-
-//       return res.redirect(`http://localhost:5174/payment-success?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-success?merchantOrderId=${merchantOrderId}`);
-//     } else {
-//       await MembershipSubmission.findOneAndUpdate(
-//         { _id: merchantOrderId },
-//         {
-//           'paymentResult.status': 'FAILED',
-//           'paymentResult.phonepeResponse': response
-//         }
-//       );
-//       return res.redirect(`http://localhost:5174/payment-failure?merchantOrderId=${merchantOrderId}`);
-//       // return res.redirect(`https://www.madaramahasabha.com/payment-failure?merchantOrderId=${merchantOrderId}`);
-//     }
-//   } catch (error) {
-//     console.log('error while Payment', error);
-//     res.status(500).send('Internal server error during payment status check');
-//   }
-// };
-
-
-
 
 exports.getStatusOfPayment = async (req, res) => {
   console.log('getStatusOfPayment invoked with query:', req.query);
@@ -953,6 +333,35 @@ exports.getStatusOfPayment = async (req, res) => {
 
       if (!updated) {
         return res.status(404).send("Membership submission not found");
+      }
+
+      // Generate membershipId if not already set
+      let ensuredMembershipId = updated.membershipId;
+      if (!ensuredMembershipId) {
+        // Determine membership amount from saved values (default 500)
+        let membershipAmount = 500;
+        try {
+          const amountEntry = Array.isArray(updated.values)
+            ? updated.values.find(v => v && v.label === 'Membership Amount')
+            : null;
+          if (amountEntry && amountEntry.value) {
+            const parsed = parseInt(amountEntry.value);
+            if (!Number.isNaN(parsed)) membershipAmount = parsed;
+          }
+        } catch (e) {
+          // keep default
+        }
+
+        try {
+          ensuredMembershipId = await getNextMembershipId(membershipAmount);
+          await MembershipSubmission.findByIdAndUpdate(
+            merchantOrderId,
+            { membershipId: ensuredMembershipId },
+            { new: false }
+          );
+        } catch (e) {
+          console.error('Failed to assign membershipId post-payment:', e?.message || e);
+        }
       }
 
       // Extract mobile number
@@ -985,7 +394,7 @@ exports.getStatusOfPayment = async (req, res) => {
 
       if (mobileNumber) {
         const MSG91_AUTHKEY = process.env.MSG91_AUTHKEY || '462122ASu5sdOuq6889b2bcP1';
-        const membershipId = updated.membershipId || '';
+        const membershipId = ensuredMembershipId || updated.membershipId || '';
 
         // Bulk message payload as per your initial template curl example
         const messagePayload = {
@@ -1034,8 +443,8 @@ exports.getStatusOfPayment = async (req, res) => {
       }
       // Send SMS template via MSG91 API
       try {
-        if (mobileNumber && updated.membershipId) {
-          await sendSmsViaMsg91(mobileNumber, updated.membershipId);
+        if (mobileNumber && (ensuredMembershipId || updated.membershipId)) {
+          await sendSmsViaMsg91(mobileNumber, ensuredMembershipId || updated.membershipId);
         }
       } catch (smsErr) {
         console.log('MSG91 SMS Template send failed:', smsErr?.response?.data || smsErr.message);

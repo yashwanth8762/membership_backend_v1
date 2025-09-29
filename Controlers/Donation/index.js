@@ -41,7 +41,7 @@ exports.submitDonation = async (req, res) => {
   
       // Construct redirect URL where your backend will check payment status
       const redirectUrl = `https://www.madaramahasabha.com/api/donation/check-status?merchantOrderId=${merchantOrderId}`;
-      // const redirectUrl = `http://localhost:5000/donation/check-status?merchantOrderId=${merchantOrderId}`;
+      // const redirectUrl = `http://localhost:5000/donation/check-status?merchantOrderId=${merchantOrderId}`;`
 
       // Use your production URL accordingly
       // const redirectUrl = `https://yourdomain.com/api/donations/check-status?merchantOrderId=${merchantOrderId}`;

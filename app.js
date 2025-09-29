@@ -91,8 +91,41 @@ app.get('/', (req, res) => {
       const DB_PORT = process.env.PORT || PORT;
   
       mongoose.connect(DB_URL, { useNewUrlParser: true, useUnifiedTopology: true })
-          .then(() => {
+          .then(async () => {
               console.log("DB Connection Successful");
+              try {
+                // Sync indexes for membership_submission to ensure sparse unique index on membershipId
+                const { MembershipSubmission } = require('./Modals/Membership');
+                const collection = mongoose.connection.collection('membership_submissions');
+                try {
+                  const existing = await collection.indexes();
+                  for (const idx of existing) {
+                    if (idx.key && idx.key.membershipId === 1) {
+                      await collection.dropIndex(idx.name);
+                      console.log(`Dropped existing membershipId index ${idx.name}`);
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Unable to inspect/drop indexes for membership_submissions:', e?.message || e);
+                }
+
+                // Create the correct partial unique index explicitly
+                try {
+                  await collection.createIndex(
+                    { membershipId: 1 },
+                    { unique: true, name: 'membershipId_unique_partial', partialFilterExpression: { membershipId: { $type: 'string' } } }
+                  );
+                  console.log('Ensured partial unique index on membershipId');
+                } catch (e) {
+                  console.warn('Error ensuring partial unique index on membershipId:', e?.message || e);
+                }
+
+                // Also run Mongoose sync as a safety net
+                await MembershipSubmission.syncIndexes();
+                console.log('Indexes synced for MembershipSubmission');
+              } catch (idxErr) {
+                console.warn('Failed to sync indexes for MembershipSubmission:', idxErr?.message || idxErr);
+              }
               app.listen(DB_PORT, () => {
                   console.log(`Server is running on port ${DB_PORT}`);
               });

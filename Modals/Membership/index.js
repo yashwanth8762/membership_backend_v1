@@ -99,7 +99,7 @@ const membershipCounterSchema = new Schema({
 
 // Schema for user membership submissions
 const membershipSubmissionSchema = new Schema({
-  membershipId: { type: String, required: true, unique: true },  // New sequential ID like "G-001"
+  membershipId: { type: String, unique: false, default: undefined },  // Set only on success
   formId: { type: ObjectId, ref: 'membership_form', required: true },
   district: { type: ObjectId, ref: 'district', required: true },
   taluk: { type: ObjectId, ref: 'taluk', required: true },
@@ -120,6 +120,13 @@ const membershipSubmissionSchema = new Schema({
 
   submittedAt: { type: Date, default: Date.now },
 });
+
+// Ensure sparse unique index for membershipId to allow multiple nulls
+// Use a partial index that only applies when membershipId is a string
+membershipSubmissionSchema.index(
+  { membershipId: 1 },
+  { unique: true, name: 'membershipId_unique_partial', partialFilterExpression: { membershipId: { $type: 'string' } } }
+);
 
 
 membershipFormSchema.set('toJSON', {
