@@ -73,7 +73,7 @@ exports.getForms = async (req, res) => {
 // User: Submit a membership form with sequential membership ID generation
 exports.submitMembership = async (req, res) => {
   try {
-    const { formId, district, taluk, adhar_no, email, bloodGroup, values, paymentResult } = req.body;
+    const { formId, district, taluk, adhar_no, email, bloodGroup, referredBy, values, paymentResult } = req.body;
 
     // Validate required fields
     if (!formId) return res.status(400).json({ message: "Form ID is required" });
@@ -109,6 +109,7 @@ exports.submitMembership = async (req, res) => {
       adhar_no,
       email,
       bloodGroup,
+      referredBy: referredBy || '',
       paymentResult: {
         status: 'initiated'
       },
@@ -451,7 +452,6 @@ exports.getStatusOfPayment = async (req, res) => {
       }
 
       // return res.redirect(`http://localhost:5174/payment-success?merchantOrderId=${merchantOrderId}`);
-      // Replace with production URL as needed:
       return res.redirect(`https://www.madaramahasabha.com/payment-success?merchantOrderId=${merchantOrderId}`);
 
     } else {
@@ -502,6 +502,96 @@ exports.redirectToUserMembershipPage = async (req, res) => {
   } catch (error) {
     console.error('Error in redirectToUserMembershipPage:', error);
     return res.status(500).send('Internal server error');
+  }
+};
+
+// Admin: Get district and taluk level statistics
+exports.getDistrictTalukStatistics = async (req, res) => {
+  try {
+    // Get all submissions with populated district and taluk
+    const submissions = await MembershipSubmission.find({})
+      .populate('district', 'name k_name')
+      .populate('taluk', 'name k_name')
+      .lean();
+
+    // Group by district
+    const districtStats = {};
+    const talukStats = {};
+
+    submissions.forEach((submission) => {
+      if (!submission.district || !submission.taluk) return;
+
+      const districtId = submission.district._id.toString();
+      const districtName = submission.district.name || submission.district.k_name || 'Unknown';
+      const districtKName = submission.district.k_name || submission.district.name || 'Unknown';
+
+      const talukId = submission.taluk._id.toString();
+      const talukName = submission.taluk.name || submission.taluk.k_name || 'Unknown';
+      const talukKName = submission.taluk.k_name || submission.taluk.name || 'Unknown';
+
+      // District statistics
+      if (!districtStats[districtId]) {
+        districtStats[districtId] = {
+          districtId,
+          districtName,
+          districtKName,
+          totalMemberships: 0,
+          taluks: {},
+        };
+      }
+      districtStats[districtId].totalMemberships++;
+
+      // Taluk statistics within district
+      if (!districtStats[districtId].taluks[talukId]) {
+        districtStats[districtId].taluks[talukId] = {
+          talukId,
+          talukName,
+          talukKName,
+          count: 0,
+        };
+      }
+      districtStats[districtId].taluks[talukId].count++;
+
+      // Overall taluk statistics (across all districts)
+      if (!talukStats[talukId]) {
+        talukStats[talukId] = {
+          talukId,
+          talukName,
+          talukKName,
+          districtId,
+          districtName,
+          districtKName,
+          count: 0,
+        };
+      }
+      talukStats[talukId].count++;
+    });
+
+    // Convert to arrays
+    const districtArray = Object.values(districtStats).map((district) => ({
+      ...district,
+      taluks: Object.values(district.taluks),
+    }));
+
+    const talukArray = Object.values(talukStats);
+
+    // Calculate totals
+    const totalDistricts = districtArray.length;
+    const totalTaluks = talukArray.length;
+    const totalMemberships = submissions.length;
+
+    res.json({
+      summary: {
+        totalDistricts,
+        totalTaluks,
+        totalMemberships,
+      },
+      districtStats: districtArray,
+      talukStats: talukArray,
+    });
+  } catch (error) {
+    console.error('Error fetching district/taluk statistics:', error);
+    res.status(500).json({ message: 'Error fetching statistics', error: error.message });
   }
 };
 

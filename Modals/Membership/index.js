@@ -109,6 +109,7 @@ const membershipSubmissionSchema = new Schema({
   adhar_no: { type: String, required: true, unique: true },
   email: { type: String},
   bloodGroup: { type: String, required: false },
+  referredBy: { type: String, required: false },
 
   values: [
     {
