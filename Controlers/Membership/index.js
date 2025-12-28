@@ -508,8 +508,10 @@ exports.redirectToUserMembershipPage = async (req, res) => {
 // Admin: Get district and taluk level statistics
 exports.getDistrictTalukStatistics = async (req, res) => {
   try {
-    // Get all submissions with populated district and taluk
-    const submissions = await MembershipSubmission.find({})
+    // Get only submissions with successful payment (COMPLETED status)
+    const submissions = await MembershipSubmission.find({
+      'paymentResult.status': 'COMPLETED'
+    })
       .populate('district', 'name k_name')
       .populate('taluk', 'name k_name')
       .lean();
