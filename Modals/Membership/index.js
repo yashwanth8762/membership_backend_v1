@@ -129,6 +129,14 @@ membershipSubmissionSchema.index(
   { unique: true, name: 'membershipId_unique_partial', partialFilterExpression: { membershipId: { $type: 'string' } } }
 );
 
+// Performance indexes for filtering and searching
+membershipSubmissionSchema.index({ district: 1, taluk: 1, 'paymentResult.status': 1, submittedAt: -1 });
+membershipSubmissionSchema.index({ 'paymentResult.status': 1, submittedAt: -1 });
+membershipSubmissionSchema.index({ adhar_no: 1 });
+membershipSubmissionSchema.index({ email: 1 });
+membershipSubmissionSchema.index({ membershipId: 1 });
+membershipSubmissionSchema.index({ referredBy: 1 });
+
 
 membershipFormSchema.set('toJSON', {
   transform: (doc, ret, options) => {

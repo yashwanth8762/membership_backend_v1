@@ -225,50 +225,178 @@ exports.getMembershipById = async (req, res) => {
 // User: Get memberships filtered by district/taluk
 exports.getMembershipsFiltered = async (req, res) => {
   try {
-    let { district, taluk } = req.query;
+    let { district, taluk, search, page, size } = req.query;
     const query = {};
 
+    // Optional filter by district
     if (district && district !== "30") {
       if (mongoose.Types.ObjectId.isValid(district)) {
         query.district = new mongoose.Types.ObjectId(district);
       } else {
-        return res.json([]);
+        return res.json({
+          currentPage: 1,
+          items: [],
+          totalItems: 0,
+          totalPages: 0,
+        });
       }
     }
 
+    // Filter by taluk
     if (taluk && taluk !== "30") {
       if (mongoose.Types.ObjectId.isValid(taluk)) {
         query.taluk = new mongoose.Types.ObjectId(taluk);
       } else {
-        return res.json([]);
+        return res.json({
+          currentPage: 1,
+          items: [],
+          totalItems: 0,
+          totalPages: 0,
+        });
       }
     }
 
-    const submissions = await MembershipSubmission.find(query)
-      .populate("district", "name k_name")
-      .populate("taluk", "name k_name")
-      .lean();
+    // Only include successful payments
+    query['paymentResult.status'] = 'COMPLETED';
 
-    // Deeply populate media for each value
-    const response = await Promise.all(
-      submissions.map(async (submission) => {
-        const populatedValues = await Promise.all(
-          (submission.values || []).map(async (val) => {
-            if (val.media && val.media.length > 0) {
-              const mediaDocs = await Media.find({ _id: { $in: val.media } }).lean();
-              return { ...val, media: mediaDocs };
-            }
-            return val;
-          })
-        );
-        return { ...submission, values: populatedValues };
-      })
-    );
+    // Pagination setup - always 50 items per page
+    const pageInt = page ? Math.max(1, parseInt(page)) : 1;
+    const finalSize = 50; // Fixed at 50 items per page
 
-    res.json(response);
+    // Search functionality - optimized to search in indexed fields first
+    if (search && search.trim() !== "") {
+      const searchTerm = search.trim();
+      const searchRegex = new RegExp(searchTerm, "i");
+      
+      // Search in indexed fields first (much faster)
+      query.$or = [
+        { membershipId: searchRegex },
+        { adhar_no: searchRegex },
+        { email: searchRegex },
+        { referredBy: searchRegex },
+      ];
+    }
+
+    // Optimized: Get count and data separately for better performance
+    // Count query with timeout
+    const totalItems = await MembershipSubmission.countDocuments(query).maxTimeMS(5000);
+
+    // Data query - optimized aggregation pipeline
+    // Sort early and use index efficiently
+    const pipeline = [
+      { $match: query },
+      { $sort: { submittedAt: -1 } }, // Sort before skip/limit for index usage
+      { $skip: (pageInt - 1) * finalSize },
+      { $limit: finalSize },
+      {
+        $lookup: {
+          from: "districts",
+          localField: "district",
+          foreignField: "_id",
+          as: "district",
+          pipeline: [{ $project: { name: 1, k_name: 1 } }]
+        }
+      },
+      {
+        $lookup: {
+          from: "taluks",
+          localField: "taluk",
+          foreignField: "_id",
+          as: "taluk",
+          pipeline: [{ $project: { name: 1, k_name: 1 } }]
+        }
+      },
+      {
+        $addFields: {
+          district: { $arrayElemAt: ["$district", 0] },
+          taluk: { $arrayElemAt: ["$taluk", 0] }
+        }
+      },
+      {
+        $project: {
+          membershipId: 1,
+          adhar_no: 1,
+          email: 1,
+          bloodGroup: 1,
+          referredBy: 1,
+          district: 1,
+          taluk: 1,
+          values: 1,
+          paymentResult: 1,
+          submittedAt: 1
+        }
+      }
+    ];
+
+    // Execute aggregation with timeout
+    let submissions = await MembershipSubmission.aggregate(pipeline)
+      .allowDiskUse(true)
+      .maxTimeMS(10000); // 10 second timeout
+
+    // Convert ObjectIds to strings for consistency
+    submissions = submissions.map(sub => ({
+      ...sub,
+      _id: sub._id?.toString(),
+      district: sub.district?._id ? { ...sub.district, _id: sub.district._id.toString() } : sub.district,
+      taluk: sub.taluk?._id ? { ...sub.taluk, _id: sub.taluk._id.toString() } : sub.taluk,
+    }));
+
+    // Collect all media IDs to batch fetch
+    const allMediaIds = [];
+    submissions.forEach(submission => {
+      if (submission.values && Array.isArray(submission.values)) {
+        submission.values.forEach(val => {
+          if (val.media && Array.isArray(val.media) && val.media.length > 0) {
+            allMediaIds.push(...val.media);
+          }
+        });
+      }
+    });
+
+    // Batch fetch all media in one query
+    let mediaMap = new Map();
+    if (allMediaIds.length > 0) {
+      const uniqueMediaIds = [...new Set(allMediaIds.map(id => id.toString()))];
+      const mediaDocs = await Media.find({ _id: { $in: uniqueMediaIds } })
+        .select("_id name image_url doc_url video_url extension size")
+        .lean()
+        .maxTimeMS(5000);
+      
+      mediaDocs.forEach(media => {
+        mediaMap.set(media._id.toString(), media);
+      });
+    }
+
+    // Map media to values efficiently
+    const response = submissions.map(submission => {
+      const populatedValues = (submission.values || []).map(val => {
+        if (val.media && Array.isArray(val.media) && val.media.length > 0) {
+          const mediaDocs = val.media
+            .map(id => {
+              const idStr = id.toString ? id.toString() : String(id);
+              return mediaMap.get(idStr);
+            })
+            .filter(Boolean);
+          return { ...val, media: mediaDocs };
+        }
+        return val;
+      });
+      return { ...submission, values: populatedValues };
+    });
+
+    res.json({
+      currentPage: pageInt,
+      items: response,
+      totalItems,
+      totalPages: Math.ceil(totalItems / finalSize),
+    });
   } catch (error) {
     console.error("Error fetching filtered membership submissions:", error);
-    res.status(500).json({ message: "Error fetching submissions", error: error.message });
+    if (error.name === 'MongoTimeoutError' || error.message.includes('timeout')) {
+      res.status(504).json({ message: "Request timeout. Please try again or use search/filters to narrow down results.", error: "Timeout" });
+    } else {
+      res.status(500).json({ message: "Error fetching submissions", error: error.message });
+    }
   }
 };
 

@@ -335,20 +335,20 @@ module.exports.saveMediaFile = async (req, res) => {
 
     if(isFileTypeImage){
         processImage = await processSingleImage(req.file);
-        new_media.name.temp = processImage.data.name.current;
-        new_media.name.original = processImage.data.name.original;
-        new_media.name.current = processImage.data.name.current;
+        new_media.name.temp = processImage.data?.name?.current;
+        new_media.name.original = processImage.data?.name?.original;
+        new_media.name.current = processImage.data?.name?.current;
 
-        new_media.extension.original = processImage.data.extension.original;
-        new_media.extension.current = processImage.data.extension.current;
+        new_media.extension.original = processImage.data?.extension?.original;
+        new_media.extension.current = processImage.data?.extension?.current;
 
-        new_media.size.original = processImage.data.size.original;
-        new_media.size.current = processImage.data.size.current;
+        new_media.size.original = processImage.data?.size?.original;
+        new_media.size.current = processImage.data?.size?.current;
 
-        new_media.image_url.full.high_res = processImage.data.image_url.full.high_res;
-        new_media.image_url.full.low_res = processImage.data.image_url.full.low_res;
-        new_media.image_url.thumbnail.high_res = processImage.data.image_url.thumbnail.high_res;
-        new_media.image_url.thumbnail.low_res = processImage.data.image_url.thumbnail.low_res;
+        new_media.image_url.full.high_res = processImage.data?.image_url?.full?.high_res;
+        new_media.image_url.full.low_res = processImage.data?.image_url?.full?.low_res;
+        new_media.image_url.thumbnail.high_res = processImage.data?.image_url?.thumbnail?.high_res;
+        new_media.image_url.thumbnail.low_res = processImage.data?.image_url?.thumbnail?.low_res;
     }
     else if(isFileTypeVideo){
         processVideo = await processSingleVideo(req.file);
