@@ -328,10 +328,9 @@ exports.getMembershipsFiltered = async (req, res) => {
       }
     ];
 
-    // Execute aggregation with timeout
+    // Execute aggregation with timeout (using options for compatibility)
     let submissions = await MembershipSubmission.aggregate(pipeline)
-      .allowDiskUse(true)
-      .maxTimeMS(10000); // 10 second timeout
+      .option({ allowDiskUse: true, maxTimeMS: 10000 }); // 10 second timeout
 
     // Convert ObjectIds to strings for consistency
     submissions = submissions.map(sub => ({
