@@ -44,7 +44,7 @@ app.use(express.json({ limit: '2048mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2048mb' }));
 
 
-const API_ROOT ='/api/' 
+const API_ROOT ='/' 
 app.use(`${API_ROOT}assets`, express.static(path.join(__dirname, "assets")));
 app.disable('etag');
 
