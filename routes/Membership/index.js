@@ -24,6 +24,9 @@ router.get('/user/:membershipId', membershipController.redirectToUserMembershipP
 // User: Get all membership submissions filtered by district, taluk, and must include "ID card"
 router.get('/submissions', membershipController.getMembershipsFiltered);
 
+// Admin: Send membership card link via WhatsApp (msg91 template "card")
+router.post('/send-card-whatsapp', membershipController.sendCardViaWhatsApp);
+
 // Admin: Get district and taluk level statistics
 router.get('/statistics', membershipController.getDistrictTalukStatistics);
 

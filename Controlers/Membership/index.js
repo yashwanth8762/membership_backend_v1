@@ -598,6 +598,103 @@ exports.getStatusOfPayment = async (req, res) => {
     return res.status(500).send('Internal server error during payment status check');
   }
 };
+// Admin: Send membership card link via WhatsApp (msg91 bulk template "card")
+exports.sendCardViaWhatsApp = async (req, res) => {
+  try {
+    const { membershipId } = req.body;
+    if (!membershipId) {
+      return res.status(400).json({ message: 'membershipId is required' });
+    }
+
+    const submission = await MembershipSubmission.findOne({ membershipId })
+      .populate('district', 'name')
+      .populate('taluk', 'name')
+      .lean();
+    if (!submission) {
+      return res.status(404).json({ message: 'Membership not found' });
+    }
+
+    let mobileNumber = '';
+    const values = submission.values || [];
+    const mobileField = values.find(
+      (v) =>
+        (v.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v.label))) ||
+        (v._doc && v._doc.label && /mobile|phone|ಫೋನ್|ಮೊಬೈಲ್/i.test(String(v._doc.label)))
+    );
+    if (mobileField) {
+      mobileNumber = (mobileField.value || mobileField._doc?.value || '').toString().trim();
+    }
+
+    if (!mobileNumber) {
+      return res.status(400).json({ message: 'No mobile number found for this membership' });
+    }
+
+    const digits = mobileNumber.replace(/\D/g, '');
+    if (digits.length === 10) {
+      mobileNumber = `+91${digits}`;
+    } else if (digits.startsWith('91') && digits.length === 12) {
+      mobileNumber = `+${digits}`;
+    } else if (!mobileNumber.startsWith('+')) {
+      mobileNumber = `+${digits}`;
+    }
+
+    const frontendBase = process.env.FRONTEND_BASE_URL || 'https://www.madaramahasabha.com';
+    const cardLink = `${frontendBase}/membership/user/${encodeURIComponent(membershipId)}`;
+
+    const MSG91_AUTHKEY = process.env.MSG91_AUTHKEY || '462122ASu5sdOuq6889b2bcP1';
+    const messagePayload = {
+      integrated_number: process.env.MSG91_WHATSAPP_INTEGRATED_NUMBER || '15558848753',
+      content_type: 'template',
+      payload: {
+        messaging_product: 'whatsapp',
+        type: 'template',
+        template: {
+          name: 'card',
+          language: {
+            code: 'en',
+            policy: 'deterministic'
+          },
+          namespace: '33b99d31_01ca_42e2_83fc_59571bba67f6',
+          to_and_components: [
+            {
+              to: [mobileNumber],
+              components: {
+                body_1: {
+                  type: 'text',
+                  value: cardLink
+                }
+              }
+            }
+          ]
+        }
+      }
+    };
+
+    const apiURL = 'https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/';
+    const axiosResponse = await axios.post(apiURL, messagePayload, {
+      headers: {
+        authkey: MSG91_AUTHKEY,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      maxRedirects: 5
+    });
+
+    console.log('WhatsApp card link sent:', membershipId, axiosResponse.data);
+    return res.status(200).json({
+      message: 'Card link sent via WhatsApp',
+      membershipId,
+      cardLink
+    });
+  } catch (error) {
+    console.error('Send card via WhatsApp error:', error.response?.data || error.message);
+    const status = error.response?.status || 500;
+    const message =
+      error.response?.data?.message || error.message || 'Failed to send card via WhatsApp';
+    return res.status(status).json({ message });
+  }
+};
+
 // Redirect QR scans to the public frontend user details page
 exports.redirectToUserMembershipPage = async (req, res) => {
   try {
