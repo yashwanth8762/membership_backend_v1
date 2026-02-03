@@ -399,6 +399,160 @@ exports.getMembershipsFiltered = async (req, res) => {
   }
 };
 
+// Admin: Get all matching submissions for export (no pagination; supports manualOnly = manually uploaded only)
+const EXPORT_MAX_LIMIT = 500000000000;
+exports.getMembershipsForExport = async (req, res) => {
+  try {
+    let { district, taluk, search, manualOnly } = req.query;
+    const query = {};
+
+    if (district && district !== "30") {
+      if (mongoose.Types.ObjectId.isValid(district)) {
+        query.district = new mongoose.Types.ObjectId(district);
+      } else {
+        return res.json({ items: [] });
+      }
+    }
+
+    if (taluk && taluk !== "30") {
+      if (mongoose.Types.ObjectId.isValid(taluk)) {
+        query.taluk = new mongoose.Types.ObjectId(taluk);
+      } else {
+        return res.json({ items: [] });
+      }
+    }
+
+    // manualOnly = only manually uploaded (payment not COMPLETED)
+    if (manualOnly === 'true' || manualOnly === '1') {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { 'paymentResult.status': { $ne: 'COMPLETED' } },
+          { 'paymentResult.status': { $exists: false } },
+        ],
+      });
+    } else {
+      query['paymentResult.status'] = 'COMPLETED';
+    }
+
+    if (search && search.trim() !== "") {
+      const searchTerm = search.trim();
+      const searchRegex = new RegExp(searchTerm, "i");
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { membershipId: searchRegex },
+          { adhar_no: searchRegex },
+          { email: searchRegex },
+          { referredBy: searchRegex },
+        ],
+      });
+    }
+
+    const pipeline = [
+      { $match: query },
+      { $sort: { submittedAt: -1 } },
+      { $limit: EXPORT_MAX_LIMIT },
+      {
+        $lookup: {
+          from: "districts",
+          localField: "district",
+          foreignField: "_id",
+          as: "district",
+          pipeline: [{ $project: { name: 1, k_name: 1 } }]
+        }
+      },
+      {
+        $lookup: {
+          from: "taluks",
+          localField: "taluk",
+          foreignField: "_id",
+          as: "taluk",
+          pipeline: [{ $project: { name: 1, k_name: 1 } }]
+        }
+      },
+      {
+        $addFields: {
+          district: { $arrayElemAt: ["$district", 0] },
+          taluk: { $arrayElemAt: ["$taluk", 0] }
+        }
+      },
+      {
+        $project: {
+          membershipId: 1,
+          adhar_no: 1,
+          email: 1,
+          bloodGroup: 1,
+          referredBy: 1,
+          district: 1,
+          taluk: 1,
+          values: 1,
+          paymentResult: 1,
+          submittedAt: 1
+        }
+      }
+    ];
+
+    let submissions = await MembershipSubmission.aggregate(pipeline)
+      .option({ allowDiskUse: true, maxTimeMS: 60000 });
+
+    submissions = submissions.map(sub => ({
+      ...sub,
+      _id: sub._id?.toString(),
+      district: sub.district?._id ? { ...sub.district, _id: sub.district._id.toString() } : sub.district,
+      taluk: sub.taluk?._id ? { ...sub.taluk, _id: sub.taluk._id.toString() } : sub.taluk,
+    }));
+
+    const allMediaIds = [];
+    submissions.forEach(submission => {
+      if (submission.values && Array.isArray(submission.values)) {
+        submission.values.forEach(val => {
+          if (val.media && Array.isArray(val.media) && val.media.length > 0) {
+            allMediaIds.push(...val.media);
+          }
+        });
+      }
+    });
+
+    let mediaMap = new Map();
+    if (allMediaIds.length > 0) {
+      const uniqueMediaIds = [...new Set(allMediaIds.map(id => id.toString()))];
+      const mediaDocs = await Media.find({ _id: { $in: uniqueMediaIds } })
+        .select("_id name image_url doc_url video_url extension size")
+        .lean()
+        .maxTimeMS(10000);
+      mediaDocs.forEach(media => {
+        mediaMap.set(media._id.toString(), media);
+      });
+    }
+
+    const response = submissions.map(submission => {
+      const populatedValues = (submission.values || []).map(val => {
+        if (val.media && Array.isArray(val.media) && val.media.length > 0) {
+          const mediaDocs = val.media
+            .map(id => {
+              const idStr = id.toString ? id.toString() : String(id);
+              return mediaMap.get(idStr);
+            })
+            .filter(Boolean);
+          return { ...val, media: mediaDocs };
+        }
+        return val;
+      });
+      return { ...submission, values: populatedValues };
+    });
+
+    res.json({ items: response });
+  } catch (error) {
+    console.error("Error in getMembershipsForExport:", error);
+    if (error.name === 'MongoTimeoutError' || error.message.includes('timeout')) {
+      res.status(504).json({ message: "Export timeout. Try narrowing filters.", error: "Timeout" });
+    } else {
+      res.status(500).json({ message: "Error exporting submissions", error: error.message });
+    }
+  }
+};
+
 
 async function sendSmsViaMsg91(mobileNumber, membershipId) {
   const MSG91_AUTHKEY = '462122ASu5sdOuq6889b2bcP1';
