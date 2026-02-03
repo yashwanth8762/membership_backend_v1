@@ -672,7 +672,7 @@ const Media = require('./Modals/Media');
 const MediaType = require('./Modals/MediaType');
 const { MembershipSubmission, MembershipForm, MembershipCounter } = require('./Modals/Membership');
 
-const DB_URL = process.env.DB_URL;
+const DB_URL = 'mongodb+srv://shamanth081:12345@cluster01.ardgsrg.mongodb.net/Membership';
 
 // Add concurrency limit for image processing
 const CONCURRENT_IMAGE_LIMIT = 5;
