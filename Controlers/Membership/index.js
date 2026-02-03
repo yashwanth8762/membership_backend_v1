@@ -422,15 +422,10 @@ exports.getMembershipsForExport = async (req, res) => {
       }
     }
 
-    // manualOnly = only manually uploaded (payment not COMPLETED)
+    // manualOnly = only manually uploaded (membershipId starts with ★, e.g. ★G-3984)
+    const MANUAL_PREFIX = '\u2605'; // ★ (Black Star)
     if (manualOnly === 'true' || manualOnly === '1') {
-      query.$and = query.$and || [];
-      query.$and.push({
-        $or: [
-          { 'paymentResult.status': { $ne: 'COMPLETED' } },
-          { 'paymentResult.status': { $exists: false } },
-        ],
-      });
+      query.membershipId = { $regex: `^${MANUAL_PREFIX}` };
     } else {
       query['paymentResult.status'] = 'COMPLETED';
     }
