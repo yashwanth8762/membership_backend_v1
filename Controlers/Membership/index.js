@@ -798,9 +798,9 @@ exports.sendCardViaWhatsApp = async (req, res) => {
         messaging_product: 'whatsapp',
         type: 'template',
         template: {
-          name: 'card',
+          name: 'card_link',
           language: {
-            code: 'en',
+            code: 'kn',
             policy: 'deterministic'
           },
           namespace: '33b99d31_01ca_42e2_83fc_59571bba67f6',
