@@ -697,6 +697,12 @@ async function extractImagesFromExcel(filePath) {
   
   console.log('\n=== Extracting Embedded Images ===');
   
+  // ExcelJS stores media in workbook.model.media (ensure it exists)
+  const media = workbook.model && Array.isArray(workbook.model.media) ? workbook.model.media : [];
+  if (media.length === 0 && worksheet.getImages().length > 0) {
+    console.warn('  ⚠ Worksheet has images but workbook.model.media is empty. Try re-saving the Excel file in Excel/Sheets.');
+  }
+  
   // Get all images from worksheet
   const images = worksheet.getImages();
   console.log(`Found ${images.length} total images in worksheet`);
@@ -704,7 +710,7 @@ async function extractImagesFromExcel(filePath) {
   images.forEach((image, index) => {
     try {
       const imageId = image.imageId;
-      const imageData = workbook.model.media.find(m => m.index === imageId);
+      const imageData = media.find(m => m.index === imageId);
       
       if (imageData && imageData.buffer) {
         // ExcelJS rows are 0-indexed and can be fractional for floating images
@@ -788,9 +794,9 @@ function normalizeString(value) {
   return value.toString().trim().normalize('NFC').replace(/\s+/g, ' ');
 }
 
-// Save extracted image buffer to temp file
+// Save extracted image buffer to temp file (use __dirname so path works regardless of cwd)
 async function saveImageBuffer(imageBuffer, imageExtension, rowNumber, index = 0) {
-  const tempDir = './assets/temp_resources';
+  const tempDir = path.join(__dirname, 'assets', 'temp_resources');
   
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
@@ -877,12 +883,13 @@ async function processSingleImage(image, rowNumber) {
     let final_file_name = file_name_without_ext.replaceAll(/\s/g, '');
     final_file_name = final_file_name.replace(/[{()}]/g, "");
 
-    // Ensure directories exist
+    // Ensure directories exist (use __dirname so paths work regardless of cwd)
+    const assetsBase = path.join(__dirname, 'assets', 'images');
     const dirs = [
-      'assets/images/full/high_res',
-      'assets/images/full/low_res',
-      'assets/images/thumb/high_res',
-      'assets/images/thumb/low_res'
+      path.join(assetsBase, 'full', 'high_res'),
+      path.join(assetsBase, 'full', 'low_res'),
+      path.join(assetsBase, 'thumb', 'high_res'),
+      path.join(assetsBase, 'thumb', 'low_res')
     ];
     
     dirs.forEach(dir => {
@@ -891,49 +898,56 @@ async function processSingleImage(image, rowNumber) {
       }
     });
 
+    const fullHighResPath = path.join(assetsBase, 'full', 'high_res', `${final_file_name}.webp`);
+    const fullLowResPath = path.join(assetsBase, 'full', 'low_res', `${final_file_name}.webp`);
+    const thumbHighResPath = path.join(assetsBase, 'thumb', 'high_res', `${final_file_name}.webp`);
+    const thumbLowResPath = path.join(assetsBase, 'thumb', 'low_res', `${final_file_name}.webp`);
+
     // Process full high res
-    await sharp(image_url)
+    await sharp(image.path)
       .resize({ width: set_image_width_as_max_width ? 1500 : image_metadata.width })
       .toFormat('webp')
       .webp({ quality: 80 })
-      .toFile(`assets/images/full/high_res/${final_file_name}.webp`);
+      .toFile(fullHighResPath);
 
-    imageToReturn.image_url.full.high_res = `assets/images/full/high_res/${final_file_name}.webp`;
+    // Store relative paths for DB (media controller expects e.g. "assets/images/full/high_res/...")
+    const rel = (p) => path.relative(__dirname, p).replace(/\\/g, '/');
+    imageToReturn.image_url.full.high_res = rel(fullHighResPath);
 
     // Process full low res
-    await sharp(image_url)
+    await sharp(image.path)
       .resize({ width: set_image_width_as_max_width ? 1500 : image_metadata.width })
       .toFormat('webp')
       .webp({ quality: 60 })
-      .toFile(`assets/images/full/low_res/${final_file_name}.webp`);
+      .toFile(fullLowResPath);
 
-    imageToReturn.image_url.full.low_res = `assets/images/full/low_res/${final_file_name}.webp`;
+    imageToReturn.image_url.full.low_res = rel(fullLowResPath);
 
     if (is_thumbnail_required) {
-      await sharp(imageToReturn.image_url.full.high_res)
+      await sharp(fullHighResPath)
         .resize({ width: 250, height: 250, fit: 'contain', background: "#f1f5f9" })
         .toFormat('webp')
         .webp({ quality: 100 })
-        .toFile(`assets/images/thumb/high_res/${final_file_name}.webp`);
+        .toFile(thumbHighResPath);
 
-      imageToReturn.image_url.thumbnail.high_res = `assets/images/thumb/high_res/${final_file_name}.webp`;
+      imageToReturn.image_url.thumbnail.high_res = rel(thumbHighResPath);
 
-      await sharp(imageToReturn.image_url.full.low_res)
+      await sharp(fullLowResPath)
         .resize({ width: 250, height: 250, fit: 'contain', background: "#f1f5f9" })
         .toFormat('webp')
         .webp({ quality: 70 })
-        .toFile(`assets/images/thumb/low_res/${final_file_name}.webp`);
+        .toFile(thumbLowResPath);
 
-      imageToReturn.image_url.thumbnail.low_res = `assets/images/thumb/low_res/${final_file_name}.webp`;
+      imageToReturn.image_url.thumbnail.low_res = rel(thumbLowResPath);
     } else {
       imageToReturn.image_url.thumbnail.high_res = imageToReturn.image_url.full.high_res;
       imageToReturn.image_url.thumbnail.low_res = imageToReturn.image_url.full.low_res;
     }
 
-    let optimized_file_metadata = await sharp(imageToReturn.image_url.full.high_res).metadata();
+    let optimized_file_metadata = await sharp(fullHighResPath).metadata();
     imageToReturn.extension.current = optimized_file_metadata.format;
     
-    let optimized_image = fs.statSync(imageToReturn.image_url.full.high_res);
+    let optimized_image = fs.statSync(fullHighResPath);
     imageToReturn.size.current = optimized_image.size;
 
     // Delete original temp file
