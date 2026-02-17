@@ -1328,7 +1328,7 @@ async function importData(filePath, defaultFormId = null) {
 // Main function
 (async () => {
   await connectDB();
-  const filePath = './bangaluru2.xlsx';
+  const filePath = './bangaluru1.xlsx';
   
   try {
     await importData(filePath);
