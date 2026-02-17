@@ -794,6 +794,12 @@ function normalizeString(value) {
   return value.toString().trim().normalize('NFC').replace(/\s+/g, ' ');
 }
 
+// Escape special regex characters so district/taluk names like "XYZ (North)" don't break the match
+function escapeRegex(str) {
+  if (!str) return '';
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Save extracted image buffer to temp file (use __dirname so path works regardless of cwd)
 async function saveImageBuffer(imageBuffer, imageExtension, rowNumber, index = 0) {
   const tempDir = path.join(__dirname, 'assets', 'temp_resources');
@@ -1169,7 +1175,7 @@ async function importData(filePath, defaultFormId = null) {
       console.log(`${'─'.repeat(60)}`);
 
       const district = await District.findOne({ 
-        name: { $regex: new RegExp(`^${districtName}$`, 'i') } 
+        name: { $regex: new RegExp(`^${escapeRegex(districtName)}$`, 'i') } 
       });
       
       if (!district) {
@@ -1178,13 +1184,28 @@ async function importData(filePath, defaultFormId = null) {
         continue;
       }
 
-      const taluk = await Taluk.findOne({ 
-        name: { $regex: new RegExp(`^${talukName}$`, 'i') },
+      let taluk = await Taluk.findOne({ 
+        name: { $regex: new RegExp(`^${escapeRegex(talukName)}$`, 'i') },
         district: district._id 
       });
       
+      // Fallback: if taluk not found in this district, try by name only (e.g. Excel has wrong district name)
       if (!taluk) {
-        console.error(`❌ Taluk not found: "${talukName}"`);
+        const talukByName = await Taluk.find({ 
+          name: { $regex: new RegExp(`^${escapeRegex(talukName)}$`, 'i') }
+        }).populate('district', 'name');
+        if (talukByName.length === 1) {
+          taluk = talukByName[0];
+          console.log(`  ℹ Using taluk "${taluk.name}" from district "${taluk.district?.name}" (row had "${districtName}")`);
+        } else if (talukByName.length > 1) {
+          console.error(`❌ Taluk not found: "${talukName}" in district "${district.name}". Multiple taluks named "${talukName}" exist in other districts. Fix the District column for this row.`);
+          failCount++;
+          continue;
+        }
+      }
+      
+      if (!taluk) {
+        console.error(`❌ Taluk not found: "${talukName}" in district "${district.name}". Check spelling or add the taluk to the DB.`);
         failCount++;
         continue;
       }
