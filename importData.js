@@ -817,7 +817,7 @@ async function saveImageBuffer(imageBuffer, imageExtension, rowNumber, index = 0
   fs.writeFileSync(tempFilePath, imageBuffer);
   
   // Verify file was written
-  if (!fs.existsSync(tempFilePath)) {
+  if (!fs.existsSync(tempFilePath)) { 
     throw new Error(`Failed to write temp file: ${tempFilePath}`);
   }
   
