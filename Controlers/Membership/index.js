@@ -59,11 +59,40 @@ exports.createForm = async (req, res) => {
 };
 
 
+// Fields removed from the public membership form (existing submissions keep their data)
+const isRemovedFormField = (label = '') =>
+  /subcast|ಉಪಜಾತಿ/i.test(label) ||
+  /permanent\s*add?ress|ಖಾಯಂ/i.test(label) ||
+  /ward|ವಾರ್ಡ್/i.test(label);
+
+const normalizeFormFields = (fields = []) => {
+  const cleaned = fields.filter((f) => !isRemovedFormField(f.label));
+  const hasSingleAddress = cleaned.some(
+    (f) => /ವಿಳಾಸ\s*\/\s*address/i.test(f.label) || /^address$/i.test((f.label || '').trim())
+  );
+  return cleaned
+    .filter((f) => !(hasSingleAddress && /current\s*address|ಪ್ರಸ್ತುತ/i.test(f.label)))
+    .map((f) => {
+      if (/current\s*address|ಪ್ರಸ್ತುತ\s*ವಿಳಾಸ/i.test(f.label)) {
+        return { ...f, label: 'ವಿಳಾಸ / Address', label_kn: f.label_kn || 'ವಿಳಾಸ' };
+      }
+      return f;
+    });
+};
+
 // Admin: Get all membership forms
 exports.getForms = async (req, res) => {
   try {
     const forms = await MembershipForm.find();
-    res.json(forms);
+    const sanitized = forms.map((form) => {
+      const obj = form.toObject();
+      obj.fields = normalizeFormFields(obj.fields);
+      obj.id = obj._id;
+      delete obj._id;
+      delete obj.__v;
+      return obj;
+    });
+    res.json(sanitized);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching forms', error: error.message });
   }
@@ -222,10 +251,106 @@ exports.getMembershipById = async (req, res) => {
 };
 
 
+// Filter by Membership Amount in values (stored as string or number)
+function applyAmountFilter(query, amount) {
+  if (!amount || amount === 'all' || amount === '30' || String(amount).trim() === '') return;
+  const amountNum = parseInt(amount, 10);
+  if (Number.isNaN(amountNum)) return;
+  const amountStr = String(amountNum);
+  query.$and = query.$and || [];
+  query.$and.push({
+    values: {
+      $elemMatch: {
+        label: 'Membership Amount',
+        value: { $in: [amountNum, amountStr] },
+      },
+    },
+  });
+}
+
+// Search by membershipId, Aadhaar, phone (in values), email, referredBy
+function applySearchFilter(query, search) {
+  if (!search || String(search).trim() === '') return;
+
+  const searchTerm = String(search).trim();
+  const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const searchRegex = new RegExp(escaped, 'i');
+  const digits = searchTerm.replace(/\D/g, '');
+
+  const phoneLabel = /mobile|phone|ಮೊಬೈಲ್|ಫೋನ್|Mobile Number/i;
+  const aadhaarLabel = /adhar|aadhaar|aadhar|ಆಧಾರ್/i;
+
+  const orConditions = [
+    { membershipId: searchRegex },
+    { adhar_no: searchRegex },
+    { email: searchRegex },
+    { referredBy: searchRegex },
+    {
+      values: {
+        $elemMatch: {
+          label: phoneLabel,
+          value: searchRegex,
+        },
+      },
+    },
+    {
+      values: {
+        $elemMatch: {
+          label: aadhaarLabel,
+          value: searchRegex,
+        },
+      },
+    },
+  ];
+
+  // Digit-based match so "9876543210" finds "+91 98765-43210" and spaced Aadhaar
+  if (digits.length >= 4) {
+    const flexibleDigitRegex = new RegExp(digits.split('').join('\\D*'));
+    orConditions.push(
+      { adhar_no: flexibleDigitRegex },
+      {
+        values: {
+          $elemMatch: {
+            label: phoneLabel,
+            value: flexibleDigitRegex,
+          },
+        },
+      },
+      {
+        values: {
+          $elemMatch: {
+            label: phoneLabel,
+            value: { $in: [digits, Number(digits)] },
+          },
+        },
+      },
+      {
+        values: {
+          $elemMatch: {
+            label: aadhaarLabel,
+            value: flexibleDigitRegex,
+          },
+        },
+      },
+      {
+        values: {
+          $elemMatch: {
+            label: aadhaarLabel,
+            value: { $in: [digits, Number(digits)] },
+          },
+        },
+      }
+    );
+  }
+
+  query.$and = query.$and || [];
+  query.$and.push({ $or: orConditions });
+}
+
 // User: Get memberships filtered by district/taluk
 exports.getMembershipsFiltered = async (req, res) => {
   try {
-    let { district, taluk, search, page, size } = req.query;
+    let { district, taluk, search, page, size, amount } = req.query;
     const query = {};
 
     // Optional filter by district
@@ -259,23 +384,15 @@ exports.getMembershipsFiltered = async (req, res) => {
     // Only include successful payments
     query['paymentResult.status'] = 'COMPLETED';
 
+    // Filter by card type / membership amount (e.g. 500, 5000, ...)
+    applyAmountFilter(query, amount);
+
     // Pagination setup - always 50 items per page
     const pageInt = page ? Math.max(1, parseInt(page)) : 1;
     const finalSize = 50; // Fixed at 50 items per page
 
-    // Search functionality - optimized to search in indexed fields first
-    if (search && search.trim() !== "") {
-      const searchTerm = search.trim();
-      const searchRegex = new RegExp(searchTerm, "i");
-      
-      // Search in indexed fields first (much faster)
-      query.$or = [
-        { membershipId: searchRegex },
-        { adhar_no: searchRegex },
-        { email: searchRegex },
-        { referredBy: searchRegex },
-      ];
-    }
+    // Search by Aadhaar, phone, membership ID, email, referredBy
+    applySearchFilter(query, search);
 
     // Optimized: Get count and data separately for better performance
     // Count query with timeout
@@ -403,7 +520,7 @@ exports.getMembershipsFiltered = async (req, res) => {
 const EXPORT_MAX_LIMIT = 500000000000;
 exports.getMembershipsForExport = async (req, res) => {
   try {
-    let { district, taluk, search, manualOnly } = req.query;
+    let { district, taluk, search, manualOnly, amount } = req.query;
     const query = {};
 
     if (district && district !== "30") {
@@ -430,19 +547,11 @@ exports.getMembershipsForExport = async (req, res) => {
       query['paymentResult.status'] = 'COMPLETED';
     }
 
-    if (search && search.trim() !== "") {
-      const searchTerm = search.trim();
-      const searchRegex = new RegExp(searchTerm, "i");
-      query.$and = query.$and || [];
-      query.$and.push({
-        $or: [
-          { membershipId: searchRegex },
-          { adhar_no: searchRegex },
-          { email: searchRegex },
-          { referredBy: searchRegex },
-        ],
-      });
-    }
+    // Filter by card type / membership amount
+    applyAmountFilter(query, amount);
+
+    // Search by Aadhaar, phone, membership ID, email, referredBy
+    applySearchFilter(query, search);
 
     const pipeline = [
       { $match: query },
