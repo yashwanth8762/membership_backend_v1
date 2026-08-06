@@ -1104,7 +1104,7 @@ exports.getReferralReport = async (req, res) => {
         {
           values: {
             $elemMatch: {
-              label: { $regex: /^referred\s*by$/i },
+              label: { $regex: /referred\s*by/i },
               value: { $exists: true, $nin: [null, ''] },
             },
           },
@@ -1121,7 +1121,7 @@ exports.getReferralReport = async (req, res) => {
     for (const submission of submissions) {
       const referralKey = (
         submission.referredBy ||
-        extractValueByLabel(submission.values, [/^referred\s*by$/i]) ||
+        extractValueByLabel(submission.values, [/referred\s*by/i]) ||
         ''
       ).trim();
 
@@ -1139,15 +1139,6 @@ exports.getReferralReport = async (req, res) => {
         /ಮೊಬೈಲ್/,
         /ಸಂಖ್ಯೆ/,
       ]);
-
-      if (
-        search &&
-        !referralKey.toLowerCase().includes(search) &&
-        !(memberName || '').toLowerCase().includes(search) &&
-        !(submission.membershipId || '').toLowerCase().includes(search)
-      ) {
-        continue;
-      }
 
       if (!groups[referralKey]) {
         groups[referralKey] = {
@@ -1204,6 +1195,14 @@ exports.getReferralReport = async (req, res) => {
             (a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)
           ),
         };
+      })
+      .filter((group) => {
+        if (!search) return true;
+        // Search only by referred-by / referrer name (not card holder names)
+        return (
+          group.referredBy.toLowerCase().includes(search) ||
+          group.referrerName.toLowerCase().includes(search)
+        );
       })
       .sort((a, b) => b.referralCount - a.referralCount || a.referrerName.localeCompare(b.referrerName));
 
