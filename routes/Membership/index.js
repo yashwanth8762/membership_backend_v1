@@ -33,5 +33,8 @@ router.post('/send-card-whatsapp', membershipController.sendCardViaWhatsApp);
 // Admin: Get district and taluk level statistics
 router.get('/statistics', membershipController.getDistrictTalukStatistics);
 
+// Admin: Referral report (referrer → referred members)
+router.get('/referrals', membershipController.getReferralReport);
+
 
 module.exports = router; 

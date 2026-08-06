@@ -1079,4 +1079,144 @@ exports.getDistrictTalukStatistics = async (req, res) => {
   }
 };
 
+const extractValueByLabel = (values = [], patterns = []) => {
+  if (!Array.isArray(values)) return '';
+  for (const item of values) {
+    const label = String(item?.label || item?._doc?.label || '');
+    if (patterns.some((p) => p.test(label))) {
+      const value = item?.value ?? item?._doc?.value ?? '';
+      if (value !== null && value !== undefined && value !== '') {
+        return String(value).trim();
+      }
+    }
+  }
+  return '';
+};
+
+// Admin: Referral report — each referrer and the members they referred
+exports.getReferralReport = async (req, res) => {
+  try {
+    const search = String(req.query.search || '').trim().toLowerCase();
+
+    const submissions = await MembershipSubmission.find({
+      $or: [
+        { referredBy: { $exists: true, $nin: [null, ''] } },
+        {
+          values: {
+            $elemMatch: {
+              label: { $regex: /^referred\s*by$/i },
+              value: { $exists: true, $nin: [null, ''] },
+            },
+          },
+        },
+      ],
+    })
+      .populate('district', 'name k_name')
+      .populate('taluk', 'name k_name')
+      .select('membershipId referredBy values district taluk submittedAt paymentResult email adhar_no')
+      .lean();
+
+    const groups = {};
+
+    for (const submission of submissions) {
+      const referralKey = (
+        submission.referredBy ||
+        extractValueByLabel(submission.values, [/^referred\s*by$/i]) ||
+        ''
+      ).trim();
+
+      if (!referralKey) continue;
+
+      const memberName = extractValueByLabel(submission.values, [
+        /applicant\s*name/i,
+        /^name$/i,
+        /ಅರ್ಜಿದಾರನ/,
+        /ಹೆಸರು/,
+      ]);
+      const mobile = extractValueByLabel(submission.values, [
+        /mobile/i,
+        /phone/i,
+        /ಮೊಬೈಲ್/,
+        /ಸಂಖ್ಯೆ/,
+      ]);
+
+      if (
+        search &&
+        !referralKey.toLowerCase().includes(search) &&
+        !(memberName || '').toLowerCase().includes(search) &&
+        !(submission.membershipId || '').toLowerCase().includes(search)
+      ) {
+        continue;
+      }
+
+      if (!groups[referralKey]) {
+        groups[referralKey] = {
+          referredBy: referralKey,
+          referralCount: 0,
+          referredMembers: [],
+        };
+      }
+
+      groups[referralKey].referralCount += 1;
+      groups[referralKey].referredMembers.push({
+        id: submission._id,
+        membershipId: submission.membershipId || '',
+        name: memberName || 'N/A',
+        mobile: mobile || '',
+        email: submission.email || '',
+        adhar_no: submission.adhar_no || '',
+        district: submission.district?.name || submission.district?.k_name || '',
+        taluk: submission.taluk?.name || submission.taluk?.k_name || '',
+        paymentStatus: submission.paymentResult?.status || '',
+        submittedAt: submission.submittedAt,
+      });
+    }
+
+    const referralKeys = Object.keys(groups);
+    const referrerDocs = referralKeys.length
+      ? await MembershipSubmission.find({
+          membershipId: { $in: referralKeys },
+        })
+          .select('membershipId values')
+          .lean()
+      : [];
+
+    const referrerNameById = {};
+    for (const doc of referrerDocs) {
+      referrerNameById[doc.membershipId] = extractValueByLabel(doc.values, [
+        /applicant\s*name/i,
+        /^name$/i,
+        /ಅರ್ಜಿದಾರನ/,
+        /ಹೆಸರು/,
+      ]);
+    }
+
+    const referrals = Object.values(groups)
+      .map((group) => {
+        const resolvedName = referrerNameById[group.referredBy] || '';
+        return {
+          ...group,
+          referrerName: resolvedName || group.referredBy,
+          referrerMembershipId: referrerNameById[group.referredBy]
+            ? group.referredBy
+            : '',
+          referredMembers: group.referredMembers.sort(
+            (a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0)
+          ),
+        };
+      })
+      .sort((a, b) => b.referralCount - a.referralCount || a.referrerName.localeCompare(b.referrerName));
+
+    res.json({
+      summary: {
+        totalReferrers: referrals.length,
+        totalReferredMembers: referrals.reduce((sum, r) => sum + r.referralCount, 0),
+      },
+      referrals,
+    });
+  } catch (error) {
+    console.error('Error fetching referral report:', error);
+    res.status(500).json({ message: 'Error fetching referral report', error: error.message });
+  }
+};
 
