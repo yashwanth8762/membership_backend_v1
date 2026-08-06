@@ -35,6 +35,7 @@ router.get('/statistics', membershipController.getDistrictTalukStatistics);
 
 // Admin: Referral report (referrer → referred members)
 router.get('/referrals', membershipController.getReferralReport);
+router.get('/referrals/members', membershipController.getReferralMembers);
 
 
 module.exports = router; 
