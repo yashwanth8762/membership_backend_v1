@@ -988,34 +988,139 @@ exports.redirectToUserMembershipPage = async (req, res) => {
 };
 
 // Admin: Get district and taluk level statistics
+// - Includes every active district/taluk (even with 0 memberships)
+// - Merges case-insensitive duplicate district names (e.g. "Bengaluru urban" + "bengaluru urban")
+// - Maps old Bangalore East/North/Central/South/West spellings into Bengaluru palike districts
 exports.getDistrictTalukStatistics = async (req, res) => {
   try {
-    // Get only submissions with successful payment (COMPLETED status)
-    const submissions = await MembershipSubmission.find({
-      'paymentResult.status': 'COMPLETED'
-    })
-      .populate('district', 'name k_name')
-      .populate('taluk', 'name k_name')
-      .lean();
+    const normalizeName = (name = '') =>
+      String(name).trim().toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ');
 
-    // Group by district
-    const districtStats = {};
-    const talukStats = {};
+    const DISTRICT_ALIASES = {
+      'bangalore east': 'bengaluru east',
+      'banglore east': 'bengaluru east',
+      'bangalore north': 'bengaluru north',
+      'banglore north': 'bengaluru north',
+      'bangalore south': 'bengaluru south',
+      'banglore south': 'bengaluru south',
+      'bangalore west': 'bengaluru west',
+      'banglore west': 'bengaluru west',
+      'bangalore central': 'bengaluru central',
+      'bangalore centre': 'bengaluru central',
+      'bangalore center': 'bengaluru central',
+      'banglore central': 'bengaluru central',
+      'banglore centre': 'bengaluru central',
+      'banglore center': 'bengaluru central',
+    };
 
-    submissions.forEach((submission) => {
-      if (!submission.district || !submission.taluk) return;
+    const REGION_DEFAULT_TALUK = {
+      'bengaluru east': { name: 'Mahadevapura', k_name: 'ಮಹಾದೇವಪುರ' },
+      'bengaluru north': { name: 'Byatarayanapura', k_name: 'ಬ್ಯಾಟರಾಯನಪುರ' },
+      'bengaluru central': { name: 'Shanthinagar', k_name: 'ಶಾಂತಿನಗರ' },
+      'bengaluru south': { name: 'Jayanagar', k_name: 'ಜಯನಗರ' },
+      'bengaluru west': { name: 'Malleshwaram', k_name: 'ಮಲ್ಲೇಶ್ವರಂ' },
+    };
+
+    const REGION_DISPLAY = {
+      'bengaluru east': { name: 'Bengaluru East', k_name: 'ಬೆಂಗಳೂರು ಪೂರ್ವ ಪಾಲಿಕೆ' },
+      'bengaluru north': { name: 'Bengaluru North', k_name: 'ಬೆಂಗಳೂರು ಉತ್ತರ ಪಾಲಿಕೆ' },
+      'bengaluru central': { name: 'Bengaluru Central', k_name: 'ಬೆಂಗಳೂರು ಕೇಂದ್ರ ಪಾಲಿಕೆ' },
+      'bengaluru south': { name: 'Bengaluru South', k_name: 'ಬೆಂಗಳೂರು ದಕ್ಷಿಣ ಪಾಲಿಕೆ' },
+      'bengaluru west': { name: 'Bengaluru West', k_name: 'ಬೆಂಗಳೂರು ಪಶ್ಚಿಮ ಪಾಲಿಕೆ' },
+      'bengaluru urban': { name: 'Bengaluru urban', k_name: 'ಬೆಂಗಳೂರು ನಗರ' },
+    };
+
+    const canonicalDistrictKey = (name) => {
+      const n = normalizeName(name);
+      return DISTRICT_ALIASES[n] || n;
+    };
+
+    const canonicalTalukInfo = (districtKey, talukName, talukKName) => {
+      const t = normalizeName(talukName);
+      const isGeneric =
+        t === 'bangalore' ||
+        t === 'banglore' ||
+        t === 'bengaluru' ||
+        t === normalizeName(districtKey.replace('bengaluru ', ''));
+
+      if (isGeneric && REGION_DEFAULT_TALUK[districtKey]) {
+        return {
+          key: normalizeName(REGION_DEFAULT_TALUK[districtKey].name),
+          name: REGION_DEFAULT_TALUK[districtKey].name,
+          k_name: REGION_DEFAULT_TALUK[districtKey].k_name,
+        };
+      }
+      return {
+        key: t,
+        name: talukName,
+        k_name: talukKName,
+      };
+    };
+
+    const preferDisplayName = (current = '', candidate = '') => {
+      const cur = String(current || '').trim();
+      const next = String(candidate || '').trim();
+      if (!cur) return next;
+      if (!next) return cur;
+      const curLower = cur === cur.toLowerCase();
+      const nextLower = next === next.toLowerCase();
+      if (curLower && !nextLower) return next;
+      if (!curLower && nextLower) return cur;
+      // Prefer official Bengaluru * names over Bangalore *
+      if (/^bengaluru/i.test(next) && /^bangal/i.test(cur)) return next;
+      if (/^bengaluru/i.test(cur) && /^bangal/i.test(next)) return cur;
+      return cur.length >= next.length ? cur : next;
+    };
+
+    const [districts, taluks, submissions] = await Promise.all([
+      District.find({ is_active: true, is_archived: false })
+        .select('_id name k_name district_id')
+        .lean(),
+      Taluk.find({ is_active: true, is_archived: false })
+        .select('_id name k_name district')
+        .lean(),
+      MembershipSubmission.find({ 'paymentResult.status': 'COMPLETED' })
+        .populate('district', 'name k_name is_active is_archived')
+        .populate('taluk', 'name k_name is_active is_archived district')
+        .lean(),
+    ]);
+
+    // Seed every active district with all of its active taluks at count 0
+    const districtStatsById = {};
+    for (const district of districts) {
+      const districtId = district._id.toString();
+      districtStatsById[districtId] = {
+        districtId,
+        districtName: district.name || district.k_name || 'Unknown',
+        districtKName: district.k_name || district.name || 'Unknown',
+        totalMemberships: 0,
+        taluks: {},
+      };
+    }
+
+    for (const taluk of taluks) {
+      if (!taluk.district) continue;
+      const districtId = taluk.district.toString();
+      if (!districtStatsById[districtId]) continue;
+      const talukId = taluk._id.toString();
+      districtStatsById[districtId].taluks[talukId] = {
+        talukId,
+        talukName: taluk.name || taluk.k_name || 'Unknown',
+        talukKName: taluk.k_name || taluk.name || 'Unknown',
+        count: 0,
+      };
+    }
+
+    // Apply completed membership counts (also capture orphan/inactive refs so totals stay accurate)
+    for (const submission of submissions) {
+      if (!submission.district) continue;
 
       const districtId = submission.district._id.toString();
       const districtName = submission.district.name || submission.district.k_name || 'Unknown';
       const districtKName = submission.district.k_name || submission.district.name || 'Unknown';
 
-      const talukId = submission.taluk._id.toString();
-      const talukName = submission.taluk.name || submission.taluk.k_name || 'Unknown';
-      const talukKName = submission.taluk.k_name || submission.taluk.name || 'Unknown';
-
-      // District statistics
-      if (!districtStats[districtId]) {
-        districtStats[districtId] = {
+      if (!districtStatsById[districtId]) {
+        districtStatsById[districtId] = {
           districtId,
           districtName,
           districtKName,
@@ -1023,51 +1128,109 @@ exports.getDistrictTalukStatistics = async (req, res) => {
           taluks: {},
         };
       }
-      districtStats[districtId].totalMemberships++;
 
-      // Taluk statistics within district
-      if (!districtStats[districtId].taluks[talukId]) {
-        districtStats[districtId].taluks[talukId] = {
+      districtStatsById[districtId].totalMemberships += 1;
+
+      if (!submission.taluk) continue;
+      const talukId = submission.taluk._id.toString();
+      const talukName = submission.taluk.name || submission.taluk.k_name || 'Unknown';
+      const talukKName = submission.taluk.k_name || submission.taluk.name || 'Unknown';
+
+      if (!districtStatsById[districtId].taluks[talukId]) {
+        districtStatsById[districtId].taluks[talukId] = {
           talukId,
           talukName,
           talukKName,
           count: 0,
         };
       }
-      districtStats[districtId].taluks[talukId].count++;
+      districtStatsById[districtId].taluks[talukId].count += 1;
+    }
 
-      // Overall taluk statistics (across all districts)
-      if (!talukStats[talukId]) {
-        talukStats[talukId] = {
-          talukId,
-          talukName,
-          talukKName,
-          districtId,
-          districtName,
-          districtKName,
-          count: 0,
+    // Merge case-insensitive / spelling-variant duplicate district names into one report row
+    const mergedByName = {};
+    for (const district of Object.values(districtStatsById)) {
+      const key = canonicalDistrictKey(district.districtName);
+      if (!mergedByName[key]) {
+        const display = REGION_DISPLAY[key];
+        mergedByName[key] = {
+          districtId: district.districtId,
+          districtName: display?.name || district.districtName,
+          districtKName: display?.k_name || district.districtKName,
+          totalMemberships: 0,
+          taluksByName: {},
         };
       }
-      talukStats[talukId].count++;
-    });
 
-    // Convert to arrays
-    const districtArray = Object.values(districtStats).map((district) => ({
-      ...district,
-      taluks: Object.values(district.taluks),
-    }));
+      const target = mergedByName[key];
+      if (REGION_DISPLAY[key]) {
+        target.districtName = REGION_DISPLAY[key].name;
+        target.districtKName = REGION_DISPLAY[key].k_name;
+      } else {
+        target.districtName = preferDisplayName(target.districtName, district.districtName);
+        target.districtKName = preferDisplayName(target.districtKName, district.districtKName);
+      }
+      target.totalMemberships += district.totalMemberships;
 
-    const talukArray = Object.values(talukStats);
+      for (const taluk of Object.values(district.taluks)) {
+        const talukInfo = canonicalTalukInfo(key, taluk.talukName, taluk.talukKName);
+        if (!target.taluksByName[talukInfo.key]) {
+          target.taluksByName[talukInfo.key] = {
+            talukId: taluk.talukId,
+            talukName: talukInfo.name,
+            talukKName: talukInfo.k_name,
+            count: 0,
+          };
+        } else {
+          target.taluksByName[talukInfo.key].talukName = preferDisplayName(
+            target.taluksByName[talukInfo.key].talukName,
+            talukInfo.name
+          );
+          target.taluksByName[talukInfo.key].talukKName = preferDisplayName(
+            target.taluksByName[talukInfo.key].talukKName,
+            talukInfo.k_name
+          );
+        }
+        target.taluksByName[talukInfo.key].count += taluk.count;
+      }
+    }
 
-    // Calculate totals
-    const totalDistricts = districtArray.length;
-    const totalTaluks = talukArray.length;
+    // Hide legacy Bangalore* rows that fully merged into Bengaluru* keys (already canonicalized)
+    const districtArray = Object.values(mergedByName)
+      .map((district) => ({
+        districtId: district.districtId,
+        districtName: district.districtName,
+        districtKName: district.districtKName,
+        totalMemberships: district.totalMemberships,
+        taluks: Object.values(district.taluksByName).sort((a, b) =>
+          a.talukName.localeCompare(b.talukName, undefined, { sensitivity: 'base' })
+        ),
+      }))
+      .sort((a, b) =>
+        a.districtName.localeCompare(b.districtName, undefined, { sensitivity: 'base' })
+      );
+
+    const talukArray = [];
+    for (const district of districtArray) {
+      for (const taluk of district.taluks) {
+        talukArray.push({
+          talukId: taluk.talukId,
+          talukName: taluk.talukName,
+          talukKName: taluk.talukKName,
+          districtId: district.districtId,
+          districtName: district.districtName,
+          districtKName: district.districtKName,
+          count: taluk.count,
+        });
+      }
+    }
+
     const totalMemberships = submissions.length;
 
     res.json({
       summary: {
-        totalDistricts,
-        totalTaluks,
+        totalDistricts: districtArray.length,
+        totalTaluks: talukArray.length,
         totalMemberships,
       },
       districtStats: districtArray,

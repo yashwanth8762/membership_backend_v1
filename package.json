@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node app.js",
-    "dev": "nodemon app.js"
+    "dev": "nodemon app.js",
+    "seed:bengaluru-palike": "node scripts/addBengaluruPalikeDistricts.js",
+    "remap:bangalore-duplicates": "node scripts/remapBangaloreDuplicates.js"
   },
   "keywords": [],
   "author": "",
