@@ -8,7 +8,8 @@
     "start": "node app.js",
     "dev": "nodemon app.js",
     "seed:bengaluru-palike": "node scripts/addBengaluruPalikeDistricts.js",
-    "remap:bangalore-duplicates": "node scripts/remapBangaloreDuplicates.js"
+    "remap:bangalore-duplicates": "node scripts/remapBangaloreDuplicates.js",
+    "migrate:bengaluru-urban-by-address": "node scripts/migrateBengaluruUrbanByAddress.js"
   },
   "keywords": [],
   "author": "",
